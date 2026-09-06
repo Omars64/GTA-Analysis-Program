@@ -1,0 +1,31 @@
+# Secrets
+.env
+*.secret
+App_Password_GTA.txt
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Runtime output
+backend/runtime/exports/*
+backend/runtime/history/*
+!backend/runtime/exports/.gitkeep
+!backend/runtime/history/.gitkeep
+backend/config/settings.json
+backend/runtime/vehicle_image_cache.json
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local legacy copy
+/New folder/

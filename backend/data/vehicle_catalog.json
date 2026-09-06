@@ -1,0 +1,103 @@
+[
+  {
+    "name": "Grotti Itali GTO Stinger TT",
+    "manufacturer": "Grotti",
+    "vehicle_class": "Sports",
+    "aliases": [
+      "Itali GTO Stinger TT",
+      "Stinger TT"
+    ],
+    "website": "Legendary Motorsport",
+    "page_slug": "itali-gto-stinger-tt"
+  },
+  {
+    "name": "Grotti Turismo Omaggio",
+    "manufacturer": "Grotti",
+    "vehicle_class": "Super",
+    "aliases": [
+      "Turismo Omaggio"
+    ],
+    "website": "Legendary Motorsport",
+    "page_slug": "turismo-omaggio"
+  },
+  {
+    "name": "Pegassi Zentorno",
+    "manufacturer": "Pegassi",
+    "vehicle_class": "Super",
+    "aliases": [
+      "Zentorno"
+    ],
+    "website": "Legendary Motorsport",
+    "page_slug": "zentorno"
+  },
+  {
+    "name": "Ocelot Virtue",
+    "manufacturer": "Ocelot",
+    "vehicle_class": "Super",
+    "aliases": [
+      "Virtue"
+    ],
+    "website": "Legendary Motorsport",
+    "page_slug": "virtue"
+  },
+  {
+    "name": "Bravado Buffalo EVX",
+    "manufacturer": "Bravado",
+    "vehicle_class": "Muscle",
+    "aliases": [
+      "Buffalo EVX"
+    ],
+    "website": "Legendary Motorsport",
+    "page_slug": "buffalo-evx"
+  },
+  {
+    "name": "Karin Sultan RS Classic",
+    "manufacturer": "Karin",
+    "vehicle_class": "Sports",
+    "aliases": [
+      "Sultan RS Classic"
+    ],
+    "website": "Southern San Andreas Super Autos",
+    "page_slug": "sultan-rs-classic"
+  },
+  {
+    "name": "Pfister Comet S2",
+    "manufacturer": "Pfister",
+    "vehicle_class": "Sports",
+    "aliases": [
+      "Comet S2"
+    ],
+    "website": "Legendary Motorsport",
+    "page_slug": "comet-s2"
+  },
+  {
+    "name": "Benefactor Krieger",
+    "manufacturer": "Benefactor",
+    "vehicle_class": "Super",
+    "aliases": [
+      "Krieger"
+    ],
+    "website": "Legendary Motorsport",
+    "page_slug": "krieger"
+  },
+  {
+    "name": "Progen Emerus",
+    "manufacturer": "Progen",
+    "vehicle_class": "Super",
+    "aliases": [
+      "Emerus"
+    ],
+    "website": "Legendary Motorsport",
+    "page_slug": "emerus"
+  },
+  {
+    "name": "Declasse Vigero ZX",
+    "manufacturer": "Declasse",
+    "vehicle_class": "Muscle",
+    "aliases": [
+      "Vigero ZX"
+    ],
+    "website": "Southern San Andreas Super Autos",
+    "page_slug": "vigero-zx"
+  }
+]
