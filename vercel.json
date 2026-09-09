@@ -10,6 +10,8 @@
   },
   "rewrites": [
     { "source": "/api/(.*)", "destination": { "service": "api" } },
+    { "source": "/settings", "destination": { "service": "web", "path": "/index.html" } },
+    { "source": "/history", "destination": { "service": "web", "path": "/index.html" } },
     { "source": "/(.*)", "destination": { "service": "web" } }
   ]
 }
