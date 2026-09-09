@@ -62,6 +62,39 @@ class RuntimeTests(unittest.TestCase):
             steps += 1
             self.assertLess(steps, 100)
 
+    def test_corrections_persist_and_exports_use_revision(self):
+        job = self.scan()
+        row = job.data['result']['items'][0]
+        edit = {key: row.get(key, '') for key in ('item', 'details', 'category')}
+        edit.update(index=0, details='Owner correction <safe>')
+        response = self.client.put(f'/api/history/{job.id}', json={'revision': 0, 'edits': [edit], 'note': 'Correct reward'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['revision'], 1)
+        self.assertFalse(response.json['items'][0]['verified'])
+        self.assertIn('original', response.json['items'][0])
+        self.assertEqual(self.client.get(f'/api/runs/{job.id}/json').json['revision'], 1)
+        self.assertTrue(self.client.get(f'/api/history/{job.id}/pdf').data.startswith(b'%PDF'))
+        self.assertEqual(self.client.put(f'/api/history/{job.id}', json={'revision': 0, 'edits': []}).status_code, 400)
+
+    def test_saved_report_email_is_idempotent(self):
+        job = self.scan()
+        with patch.dict(os.environ, {'SMTP_USERNAME': 'owner@example.com', 'SMTP_PASSWORD': 'test-only'}), patch.object(api_module, 'send_email_with_attachment') as send:
+            payload = {'recipients': ['recipient@example.com'], 'requestId': 'unique-delivery-test-123'}
+            for _ in range(2):
+                response = self.client.post(f'/api/history/{job.id}/email', json=payload)
+                self.assertEqual(response.status_code, 200)
+            self.assertEqual(send.call_count, 1)
+            self.assertEqual(self.client.post(f'/api/history/{job.id}/email', json={**payload, 'recipients': ['a@b\nBcc:c@d']}).status_code, 400)
+
+    def test_configured_sources_include_additional_url(self):
+        params = {**self.params, 'source_urls': ['https://example.com/listing']}
+        state = {}
+        with patch.object(scan_pipeline, 'resolve_source', side_effect=lambda url: (url, 'Weekly article')):
+            state, _ = scan_pipeline.advance('test', state, params, lambda *a: None, lambda: False)
+            state, _ = scan_pipeline.advance('test', state, params, lambda *a: None, lambda: False)
+        self.assertEqual(state['phase'], 'extract')
+        self.assertEqual(len(state['sources']), 2)
+
     def scan(self):
         soup = BeautifulSoup(ARTICLE, "html.parser")
         rows = parse_weekly_soup(soup, SOURCE)

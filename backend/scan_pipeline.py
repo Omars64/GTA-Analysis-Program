@@ -3,6 +3,7 @@ from datetime import datetime
 from pathlib import Path
 import json
 import tempfile
+from urllib.parse import urlsplit
 
 from gta_weekly_scraper import (
     find_latest_powerupgaming_weekly_page, find_latest_gtabase_weekly_page,
@@ -14,6 +15,7 @@ from vehicle_intelligence import collect_article_images, enrich_vehicles, looks_
 from history_store import save_snapshot
 from sendMail import send_email_with_attachment
 from storage import cloud_mode, store
+from discovery import resolve_source
 
 PROVIDERS = [
     ("PowerUpGaming", find_latest_powerupgaming_weekly_page),
@@ -31,7 +33,21 @@ def advance(job_id, state, params, progress, cancel):
         state.setdefault("sources", [])
         index = state.get("index", 0)
         manual = params.get("manual_url")
-        if manual:
+        configured = params.get("source_urls")
+        if configured:
+            urls = list(dict.fromkeys(configured + ([manual] if manual else [])))
+            url = urls[index]
+            progress("discover", 5 + int(15 * index / len(urls)), f"Discovering weekly article from {url}…")
+            try:
+                article, title = resolve_source(url)
+                if article not in [s['url'] for s in state['sources']]:
+                    state['sources'].append({'url': article, 'provider': urlsplit(article).hostname, 'label': title})
+            except Exception as exc:
+                if isinstance(exc, InterruptedError):
+                    raise
+                state['warnings'].append(f"{url}: {type(exc).__name__}")
+            index += 1
+        elif manual:
             state["sources"] = [{"url": manual, "provider": "Manual", "label": "Manual article"}]
             index = len(PROVIDERS)
         else:
@@ -48,7 +64,7 @@ def advance(job_id, state, params, progress, cancel):
                 progress("discover", 10 + index * 6, warning, {"level": "warning"})
             index += 1
         state["index"] = index
-        if index >= len(PROVIDERS):
+        if index >= (len(urls) if configured else len(PROVIDERS)):
             if not state["sources"]:
                 raise ValueError("No source was reachable. Retry or provide a weekly article URL.")
             state.update(phase="extract", index=0, extracted=[])

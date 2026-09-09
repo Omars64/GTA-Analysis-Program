@@ -6,6 +6,7 @@ import ProgressPipeline from '../components/ProgressPipeline.jsx'
 import LogPanel from '../components/LogPanel.jsx'
 import VehicleCard from '../components/VehicleCard.jsx'
 import ResultSections from '../components/ResultSections.jsx'
+import ReportEditor from '../components/ReportEditor.jsx'
 
 const defaultEmail = { smtpServer: 'smtp.gmail.com', smtpPort: 587, username: '', password: '', fromAddress: '', recipients: '', useTls: true }
 
@@ -99,7 +100,9 @@ export default function Dashboard() {
     <div className="control-grid">
       <section className="glass-panel control-panel">
         <div className="panel-heading"><div><span className="eyebrow">SCAN CONTROL</span><h3>Run configuration</h3></div><span className="status-led">{running ? 'ACTIVE' : 'READY'}</span></div>
-        <label htmlFor="manual-url">Manual article URL <small>optional</small></label>
+        <p className="muted-note">Default sources are scanned automatically. Add or change them in Settings.</p>
+        <div className="source-list">{settings.source_urls?.map(url => <a key={url} href={url} target="_blank" rel="noreferrer">{url}</a>)}</div>
+        <label htmlFor="manual-url">Additional article URL <small>optional</small></label>
         <input id="manual-url" type="url" value={manualUrl} onChange={e => setManualUrl(e.target.value)} placeholder="Leave blank for multi-source discovery" />
         {capabilities?.cloud ? <p className="muted-note">Reports are stored securely and downloaded through your browser. No local folder is needed.</p> : <>
           <label htmlFor="output-directory">Output directory</label>
@@ -134,6 +137,7 @@ export default function Dashboard() {
 
     {snapshotId && <div className="notice-banner">Viewing an archived report. <Link to="/">Return to latest report →</Link></div>}
     {result && <>
+      <ReportEditor key={`${result.id}-${result.revision || 0}`} report={result} onSave={setResult} emailConfigured={capabilities?.email_configured} />
       {(result.warnings?.length > 0 || result.email_error || result.email_sent) && <section className="notice-banner" aria-label="Report notices">
         {result.warnings?.map((warning, index) => <p key={index}>{warning}</p>)}
         {result.email_error && <p role="alert">{result.email_error}</p>}

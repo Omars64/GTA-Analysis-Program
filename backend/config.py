@@ -12,6 +12,8 @@ DEFAULTS = {
     "generate_pdf": True,
     "save_json": True,
     "history_limit": 52,
+    "game_number": 5,
+    "source_urls": ["https://rockstarintel.com/category/gta/event-week/", "https://www.gtabase.com/grand-theft-auto-v/news/", "https://powerupgaming.co.uk/?s=GTA+Online+Weekly+Update"],
 }
 
 def get_settings():
@@ -30,12 +32,19 @@ def get_settings():
 
 def update_settings(patch):
     clean = {key: value for key, value in patch.items() if key in DEFAULTS}
-    for key, low, high in [("request_timeout", 5, 60), ("source_retries", 1, 3), ("history_limit", 1, 200)]:
+    for key, low, high in [("game_number", 1, 20), ("request_timeout", 5, 60), ("source_retries", 1, 3), ("history_limit", 1, 200)]:
         if key in clean and (type(clean[key]) is not int or not low <= clean[key] <= high):
             raise ValueError(f"{key} must be an integer between {low} and {high}.")
     for key in ("generate_pdf", "save_json"):
         if key in clean and type(clean[key]) is not bool:
             raise ValueError(f"{key} must be true or false.")
+    if "source_urls" in clean:
+        from network import validate_url
+        if not isinstance(clean["source_urls"], list) or not 1 <= len(clean["source_urls"]) <= 10:
+            raise ValueError("Provide 1 to 10 source URLs.")
+        clean["source_urls"] = list(dict.fromkeys(validate_url(url.strip()) for url in clean["source_urls"] if isinstance(url, str) and url.strip()))
+        if not clean["source_urls"]:
+            raise ValueError("Provide at least one source URL.")
     if cloud_mode():
         clean.pop("output_directory", None)
     elif "output_directory" in clean:

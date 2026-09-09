@@ -31,8 +31,8 @@ Deploy the **repository root**, not just frontend. Root vercel.json defines the 
 
 1. Sign in with Vercel CLI 59+ and run vercel link at the repository root.
 2. Create a Neon PostgreSQL database through the Vercel Marketplace and connect it to the project. The current free plan can be selected explicitly; do not enable a paid plan unintentionally.
-3. Configure DATABASE_URL, GTA_APP_PASSWORD (at least 16 characters), and GTA_SESSION_SECRET as server-side secrets for Production and Preview. Use separate databases for preview/production when preview tests should not affect production history.
-4. Run vercel deploy --prod. Later, connect Omars64/GTA-Analysis-Program under Project Settings → Git for automatic deployments from main.
+3. Configure DATABASE_URL, GTA_APP_PASSWORD (at least 14 characters), and GTA_SESSION_SECRET as server-side secrets for Production and Preview. Use separate databases for preview/production when preview tests should not affect production history.
+4. The connected Omars64/GTA-Analysis-Program repository deploys main automatically through Vercel's Git integration. The GitHub Actions workflow runs backend tests and the frontend build on pushes and pull requests. These checks run independently of Vercel deployment; configure required checks in branch protection if you need to prevent merging failing changes. For a manual deployment, run vercel deploy --prod.
 5. Verify /api/health returns status ok, sign in, run a scan, refresh during the run, and download both exports from History.
 
 No VITE_API_BASE_URL is needed for this same-origin deployment. Never put database or SMTP secrets in VITE_* variables. The app refuses to serve protected APIs if cloud storage or its password is missing.
@@ -46,6 +46,10 @@ Set SMTP_SERVER, SMTP_PORT (587 STARTTLS or 465 implicit TLS), SMTP_USERNAME, SM
 Hosted mode never accepts SMTP credentials from the browser. If email is unconfigured, the app disables the email checkbox; PDF/JSON downloads remain available. A failed delivery does not discard the report. Ambiguous email attempts are not automatically resent, to avoid duplicates.
 
 ### What persists
+
+Settings includes a GTA logo number (default 5, displayed as V) and 1–10 source URLs. The default listings discover weekly articles from RockstarINTEL, GTABase and PowerUpGaming. The dashboard's additional article URL supplements these sources.
+
+The dashboard and archive open saved reports inline. Use Edit report to correct individual fields and record a change note. Corrections preserve original evidence, increment the revision, clear source-verification for changed rows, and regenerate exports from the saved data. This is a manual editor, not an AI rewriting service. Email PDF sends the saved revision to the recipients you enter; repeated requests with the same delivery ID do not resend it.
 
 PostgreSQL stores jobs, progress events, checkpoints, settings, history, and resolved image URLs. Vercel Queues runs bounded steps with database leases and retries after interrupted delivery. A closed browser does not stop a scan. SSE reconnects automatically, with five-second status polling as fallback.
 

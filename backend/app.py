@@ -9,6 +9,14 @@ import tempfile
 import time
 from urllib.parse import urlsplit
 
+if not os.getenv('VERCEL') and os.getenv('GTA_CLOUD') != '1':
+    recovery = Path(__file__).resolve().parents[1] / '.env.gta-access.local'
+    if recovery.exists():
+        for line in recovery.read_text().splitlines():
+            key, separator, value = line.partition('=')
+            if separator and key in {'GTA_APP_PASSWORD', 'GTA_SESSION_SECRET', 'SMTP_USERNAME', 'SMTP_PASSWORD', 'SMTP_SERVER', 'SMTP_PORT', 'EMAIL_FROM'}:
+                os.environ.setdefault(key, value.strip())
+
 # Respect trusted Windows enterprise/proxy certificates without disabling TLS checks.
 if os.name == "nt":
     import truststore
@@ -25,10 +33,12 @@ from job_manager import manager, TERMINAL
 from knowledge_engine import answer_query
 from network import validate_url
 from storage import cloud_mode, store
+from report_editor import revise
+from sendMail import send_email_with_attachment
 
 app = Flask(__name__)
 password = os.getenv("GTA_APP_PASSWORD", "")
-app.secret_key = os.getenv("GTA_SESSION_SECRET") or hashlib.sha256(("gta-session:" + password).encode()).hexdigest()
+app.secret_key = hashlib.sha256((os.getenv("GTA_SESSION_SECRET", "gta-session:") + password).encode()).hexdigest()
 app.config.update(MAX_CONTENT_LENGTH=32768, SESSION_COOKIE_HTTPONLY=True,
                   SESSION_COOKIE_SECURE=cloud_mode(), SESSION_COOKIE_SAMESITE="Lax")
 origins = [x.strip() for x in os.getenv("GTA_CORS_ORIGINS", "" if cloud_mode() else "http://localhost:5173,http://127.0.0.1:5173").split(",") if x.strip()]
@@ -38,8 +48,8 @@ CORS(app, resources={r"/api/*": {"origins": origins}}, supports_credentials=True
 def setup_missing():
     missing = []
     if cloud_mode():
-        if len(password) < 16:
-            missing.append("GTA_APP_PASSWORD (at least 16 characters)")
+        if len(password) < 14:
+            missing.append("GTA_APP_PASSWORD (at least 14 characters)")
         if not store.url:
             missing.append("DATABASE_URL")
     return missing
@@ -152,6 +162,7 @@ def _params(data):
     if not isinstance(output, str):
         raise ValueError("Output directory must be a path.")
     return dict(manual_url=manual, output_dir=str(Path(output).expanduser().resolve()),
+                source_urls=settings["source_urls"],
                 send_email=send_email, email_config=email_config if send_email else None,
                 source_retries=settings["source_retries"], request_timeout=settings["request_timeout"],
                 generate_pdf=generate_pdf, save_json=flag(data, "saveJson", settings["save_json"]))
@@ -236,7 +247,7 @@ def export_snapshot(data, kind):
 def run_export(job_id, kind):
     job = manager.get(job_id)
     data = job.data.get("result") if job else None
-    return export_snapshot(data or get_snapshot(job_id), kind)
+    return export_snapshot(get_snapshot(job_id) or data, kind)
 
 
 @app.get("/api/history/<snapshot_id>/<kind>")
@@ -248,6 +259,48 @@ def history_export(snapshot_id, kind):
 def history_item(snapshot_id):
     data = get_snapshot(snapshot_id)
     return (jsonify(data), 200) if data else (jsonify(error="Report not found"), 404)
+
+
+@app.put('/api/history/<snapshot_id>')
+def edit_report(snapshot_id):
+    if not get_snapshot(snapshot_id):
+        return jsonify(error='Report not found'), 404
+    payload = body()
+    return jsonify(store.mutate('history', snapshot_id, lambda current: revise(current, payload)))
+
+
+@app.post('/api/history/<snapshot_id>/email')
+def email_report(snapshot_id):
+    data = get_snapshot(snapshot_id)
+    if not data:
+        return jsonify(error='Report not found'), 404
+    payload = body()
+    recipients = payload.get('recipients')
+    if not isinstance(recipients, list) or not 1 <= len(recipients) <= 10 or any(not isinstance(v, str) or '@' not in v or '\n' in v or '\r' in v for v in recipients):
+        raise ValueError('Provide 1 to 10 valid recipient email addresses.')
+    key = payload.get('requestId')
+    if not isinstance(key, str) or not 16 <= len(key) <= 80:
+        raise ValueError('A valid delivery request ID is required.')
+    if not os.getenv('SMTP_USERNAME') or not os.getenv('SMTP_PASSWORD'):
+        return jsonify(error='Email is not configured on the server.'), 503
+    claimed = []
+    def claim(previous):
+        if previous is None:
+            claimed.append(True)
+            return {'status': 'attempting'}
+        return previous
+    previous = store.mutate('email', snapshot_id + ':' + key, claim)
+    if not claimed:
+        return jsonify(status=previous['status']), 200 if previous['status'] == 'sent' else 409
+    try:
+        with tempfile.TemporaryDirectory(prefix='gta-mail-') as output:
+            path = _write_pdf(data, output)
+            send_email_with_attachment(subject=f"GTA Weekly Report {data['week_start']}", body='Your requested weekly report is attached.', attachment_path=path, recipients=recipients)
+        store.put('email', snapshot_id + ':' + key, {'status': 'sent'})
+        return jsonify(status='sent')
+    except Exception:
+        store.put('email', snapshot_id + ':' + key, {'status': 'failed'})
+        return jsonify(error='Email delivery failed or could not be confirmed. Check SMTP configuration before retrying.'), 502
 
 
 @app.get("/api/history")
