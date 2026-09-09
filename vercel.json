@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "services": {
-    "web": { "root": "frontend" },
+    "web": { "root": "frontend", "rewrites": [{ "source": "/settings", "destination": "/index.html" }, { "source": "/history", "destination": "/index.html" }] },
     "api": {
       "root": "backend",
       "entrypoint": "pyproject.toml",
