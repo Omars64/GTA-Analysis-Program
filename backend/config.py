@@ -1,51 +1,50 @@
-from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from threading import RLock
+from storage import BASE_DIR, cloud_mode, runtime_dir, store
 
-BASE_DIR = Path(__file__).resolve().parent
-CONFIG_DIR = BASE_DIR / "config"
-CONFIG_FILE = CONFIG_DIR / "settings.json"
-DEFAULT_EXPORT_DIR = BASE_DIR / "runtime" / "exports"
-_lock = RLock()
+DEFAULT_EXPORT_DIR = runtime_dir() / "exports"
 
 DEFAULTS = {
     "output_directory": str(DEFAULT_EXPORT_DIR),
-    "request_timeout": 30,
+    "request_timeout": 20,
     "source_retries": 2,
     "generate_pdf": True,
     "save_json": True,
     "history_limit": 52,
 }
 
-def _ensure():
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    DEFAULT_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
-    if not CONFIG_FILE.exists():
-        CONFIG_FILE.write_text(json.dumps(DEFAULTS, indent=2), encoding="utf-8")
-
 def get_settings():
-    with _lock:
-        _ensure()
+    saved = store.get("settings", "default")
+    if saved is None:
+        legacy = BASE_DIR / "config" / "settings.json"
         try:
-            data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            data = {}
-        merged = {**DEFAULTS, **data}
-        return merged
+            saved = json.loads(legacy.read_text(encoding="utf-8")) if not cloud_mode() else {}
+        except (OSError, ValueError):
+            saved = {}
+    result = {**DEFAULTS, **(saved or {})}
+    if cloud_mode():
+        result["output_directory"] = str(DEFAULT_EXPORT_DIR)
+    return result
 
-def update_settings(patch: dict):
-    allowed = set(DEFAULTS)
-    clean = {k: v for k, v in (patch or {}).items() if k in allowed}
-    if "output_directory" in clean:
-        value = os.path.abspath(os.path.expanduser(str(clean["output_directory"])))
-        os.makedirs(value, exist_ok=True)
-        if not os.access(value, os.W_OK):
-            raise ValueError("Output directory is not writable")
-        clean["output_directory"] = value
-    with _lock:
-        current = get_settings()
-        current.update(clean)
-        CONFIG_FILE.write_text(json.dumps(current, indent=2), encoding="utf-8")
-        return current
+
+def update_settings(patch):
+    clean = {key: value for key, value in patch.items() if key in DEFAULTS}
+    for key, low, high in [("request_timeout", 5, 60), ("source_retries", 1, 3), ("history_limit", 1, 200)]:
+        if key in clean and (type(clean[key]) is not int or not low <= clean[key] <= high):
+            raise ValueError(f"{key} must be an integer between {low} and {high}.")
+    for key in ("generate_pdf", "save_json"):
+        if key in clean and type(clean[key]) is not bool:
+            raise ValueError(f"{key} must be true or false.")
+    if cloud_mode():
+        clean.pop("output_directory", None)
+    elif "output_directory" in clean:
+        if not isinstance(clean["output_directory"], str) or not clean["output_directory"].strip():
+            raise ValueError("Output directory cannot be empty.")
+        path = Path(clean["output_directory"]).expanduser().resolve()
+        path.mkdir(parents=True, exist_ok=True)
+        if not os.access(path, os.W_OK):
+            raise ValueError("Output directory is not writable.")
+        clean["output_directory"] = str(path)
+    current = get_settings()
+    return store.mutate("settings", "default", lambda saved: {**current, **(saved or {}), **clean})

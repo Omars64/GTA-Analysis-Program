@@ -1,0 +1,21 @@
+[project]
+name = "gta-weekly-intelligence"
+version = "3.0.0"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "flask==3.0.0",
+    "flask-cors==4.0.0",
+    "requests==2.32.3",
+    "beautifulsoup4==4.12.3",
+    "python-dateutil==2.9.0.post0",
+    "reportlab==4.2.2",
+    "celery>=5.5,<6",
+    "psycopg[binary]>=3.2,<4",
+    "truststore>=0.10,<1; sys_platform == 'win32'",
+]
+
+[tool.vercel]
+entrypoint = "app:app"
+
+[[tool.vercel.subscribers]]
+entrypoint = "worker:app"

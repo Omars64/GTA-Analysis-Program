@@ -1,5 +1,9 @@
 # Secrets
 .env
+.env.*
+!.env.example
+!.env.*.example
+.vercel/
 *.secret
 App_Password_GTA.txt
 
@@ -20,6 +24,10 @@ backend/runtime/history/*
 !backend/runtime/history/.gitkeep
 backend/config/settings.json
 backend/runtime/vehicle_image_cache.json
+backend/runtime/*.sqlite3*
+backend/runtime/jobs/
+backend/runtime/verification/
+backend/runtime/*.log
 
 # IDE / OS
 .vscode/

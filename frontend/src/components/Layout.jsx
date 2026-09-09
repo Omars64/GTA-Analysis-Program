@@ -21,7 +21,7 @@ export default function Layout({ children }) {
         </nav>
       </header>
       <main className="page-wrap">{children}</main>
-      <footer className="footer">GTA Online Weekly Companion · local-first intelligence dashboard</footer>
+      <footer className="footer">GTA Online Weekly Companion · source-backed intelligence · unofficial fan project</footer>
     </div>
   )
 }

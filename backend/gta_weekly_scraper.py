@@ -13,6 +13,7 @@ import requests
 from bs4 import BeautifulSoup
 from dateutil.tz import gettz
 from dateutil.parser import parse as dateparse
+from network import get_soup
 
 # =========================
 # CONFIG
@@ -84,6 +85,8 @@ SECTION_ALIASES = {
     # Bonuses / discounts
     "bonuses": "Bonuses",
     "bonus rewards": "Bonuses",
+    "bonus gta$": "Bonuses",
+    "4x": "Bonuses",
     "double money": "Bonuses",
     "triple money": "Bonuses",
     "2x": "Bonuses",
@@ -160,9 +163,7 @@ def now_kw() -> datetime:
 
 
 def http_get_soup(url: str) -> BeautifulSoup:
-    resp = requests.get(url, headers=REQUEST_HEADERS, timeout=REQUEST_TIMEOUT)
-    resp.raise_for_status()
-    return BeautifulSoup(resp.text, "html.parser")
+    return get_soup(url)
 
 
 def _text(soup) -> str:
@@ -187,7 +188,8 @@ def first_thursday_on_or_after(dt_kw: datetime) -> datetime:
 
 
 def gta_week_from_publish_snap(pub_kw: datetime) -> tuple[datetime, datetime]:
-    start = first_thursday_on_or_after(pub_kw)
+    # Wednesday previews refer to tomorrow; Friday updates remain in this week.
+    start = first_thursday_on_or_after(pub_kw) if pub_kw.weekday() == 2 else gta_week_window_from_date(pub_kw)[0]
     end = (start + timedelta(days=6)).replace(hour=23, minute=59, second=59, microsecond=0)
     return start, end
 
@@ -196,42 +198,29 @@ def gta_week_from_publish_snap(pub_kw: datetime) -> tuple[datetime, datetime]:
 # DATE/RANGE EXTRACTION (article + Tez2)
 # =========================
 def extract_week_range_from_text(soup) -> Optional[tuple[datetime, datetime]]:
-    txt = _text(soup)
-
-    # "Month d–d, YYYY"
-    m = re.search(rf"\b{MONTHS}\s+(\d{{1,2}})\s*[–\-to]+\s*(\d{{1,2}})\s*,\s*(\d{{4}})\b", txt, re.IGNORECASE)
-    if m:
-        month, d1, d2, year = m.group(1), int(m.group(2)), int(m.group(3)), int(m.group(4))
-        mnum = (list(calendar.month_name).index(month.capitalize())
-                if len(month) > 3 else list(calendar.month_abbr).index(month.capitalize()))
-        start = datetime(year, mnum, d1, tzinfo=KUWAIT_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
-        end = datetime(year, mnum, d2, tzinfo=KUWAIT_TZ).replace(hour=23, minute=59, second=59, microsecond=0)
-        return start, end
-
-    # "d–d Month YYYY"
-    m = re.search(rf"\b(\d{{1,2}})\s*[–\-to]+\s*(\d{{1,2}})\s+{MONTHS}\s+(\d{{4}})\b", txt, re.IGNORECASE)
-    if m:
-        d1, d2, month, year = int(m.group(1)), int(m.group(2)), m.group(3), int(m.group(4))
-        mnum = (list(calendar.month_name).index(month.capitalize())
-                if len(month) > 3 else list(calendar.month_abbr).index(month.capitalize()))
-        start = datetime(year, mnum, d1, tzinfo=KUWAIT_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
-        end = datetime(year, mnum, d2, tzinfo=KUWAIT_TZ).replace(hour=23, minute=59, second=59, microsecond=0)
-        return start, end
-
-    # "Mon d - Mon d, YYYY"
-    m = re.search(rf"\b({MONTHS})\s+(\d{{1,2}})\s*[–\-to]+\s*({MONTHS})\s+(\d{{1,2}})\s*,\s*(\d{{4}})\b", txt,
-                  re.IGNORECASE)
-    if m:
-        m1, d1, m2, d2, year = m.group(1), int(m.group(2)), m.group(3), int(m.group(4)), int(m.group(5))
-
-        def mon2num(mon):
-            return (list(calendar.month_name).index(mon.capitalize())
-                    if len(mon) > 3 else list(calendar.month_abbr).index(mon.capitalize()))
-
-        start = datetime(year, mon2num(m1), d1, tzinfo=KUWAIT_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
-        end = datetime(year, mon2num(m2), d2, tzinfo=KUWAIT_TZ).replace(hour=23, minute=59, second=59, microsecond=0)
-        return start, end
-
+    # Named groups avoid nested captures in cross-month date ranges.
+    content = soup.find("article") or soup.find("main") or soup
+    txt = _text(content)
+    months = MONTHS.strip("()")
+    separator = r"(?:[-–—]|to|through)"
+    patterns = [
+        rf"(?P<m1>{months})\s+(?P<d1>\d{{1,2}})(?:st|nd|rd|th)?\s*{separator}\s*(?:(?P<m2>{months})\s+)?(?P<d2>\d{{1,2}})(?:st|nd|rd|th)?\s*,?\s*(?P<year>20\d{{2}})",
+        rf"(?P<d1>\d{{1,2}})\s*{separator}\s*(?P<d2>\d{{1,2}})\s+(?P<m1>{months})\s+(?P<year>20\d{{2}})",
+    ]
+    for pattern in patterns:
+        for match in re.finditer(pattern, txt, re.I):
+            values = match.groupdict()
+            year = int(values["year"])
+            try:
+                m1 = dateparse(values["m1"] + " 1 2000").month
+                m2 = dateparse((values.get("m2") or values["m1"]) + " 1 2000").month
+                start_year = year - 1 if m1 > m2 else year
+                start = datetime(start_year, m1, int(values["d1"]), tzinfo=KUWAIT_TZ)
+                end = datetime(year, m2, int(values["d2"]), 23, 59, 59, tzinfo=KUWAIT_TZ)
+                if 0 <= (end - start).days <= 20:
+                    return start, end
+            except (ValueError, OverflowError):
+                continue
     return None
 
 
@@ -409,9 +398,8 @@ def find_latest_gtabase_weekly_page() -> Tuple[str, str]:
 def find_latest_rockstarintel_weekly_page() -> Tuple[str, str]:
     import urllib.parse
     listing_urls = [
+        "https://rockstarintel.com/category/gta/event-week/",
         "https://rockstarintel.com/category/news",
-        "https://rockstarintel.com/category/grand-theft-auto-v",
-        "https://rockstarintel.com/category/grand-theft-auto-online-news",
     ]
     candidates = []
     for url in listing_urls:
@@ -506,16 +494,36 @@ def parse_weekly_soup(soup: BeautifulSoup, url: str) -> List[Dict[str, str]]:
     list items, leaf paragraphs/divs, and compact tables. This gives each source
     adapter a common fallback when site markup changes.
     """
+    # Work on a copy: date and image extraction may reuse the fetched page.
+    soup = BeautifulSoup(str(soup), "html.parser")
     content_root = (
-        soup.find("article")
+        soup.select_one(".entry-content, .post-content, [itemprop='articleBody']")
+        or soup.find("article")
         or soup.find("main")
         or soup.find(id=re.compile(r"(content|article|entry|main)", re.I))
         or soup.find(class_=re.compile(r"(content|article|entry|post|single-post)", re.I))
         or soup
     )
 
+    card_rows = []
+    for card in content_root.select("li.gta-bonuses"):
+        heading = card.find("h3")
+        if not heading:
+            continue
+        name = heading.get_text(" ", strip=True)
+        role = card.select_one(".item-type")
+        price = card.select_one(".discounted-price")
+        original = card.find("s")
+        detail = price.get_text(" ", strip=True) if price else ""
+        if original:
+            detail = f"Was {original.get_text(' ', strip=True)}; {detail}"
+        category = normalize_section_name(role.get_text(" ", strip=True)) if role else ("Discounts" if original or "%" in detail else "Bonuses")
+        vehicle_link = heading.find("a", href=re.compile(r"/vehicles/"))
+        card_rows.append({"category": category, "item": name, "details": detail, "source_url": url,
+                          "entity_type": "vehicle" if vehicle_link else None})
+        card.decompose()
     sections: List[Tuple[str, List[str]]] = []
-    headings = content_root.find_all(["h1", "h2", "h3", "h4", "h5"])
+    headings = content_root.find_all(["h2", "h3", "h4", "h5"])
 
     for heading in headings:
         header_title = _clean_candidate_text(heading.get_text(" ", strip=True))
@@ -531,13 +539,20 @@ def parse_weekly_soup(soup: BeautifulSoup, url: str) -> List[Dict[str, str]]:
                 continue
             if node.name in ["h1", "h2", "h3", "h4", "h5"]:
                 break
+            if content_root not in node.parents:
+                break
             if node.name == "li":
-                text = _clean_candidate_text(node.get_text(" ", strip=True))
+                atomic = BeautifulSoup(str(node), "html.parser").li
+                for nested in atomic.find_all(["ul", "ol"]):
+                    nested.decompose()
+                text = _clean_candidate_text(atomic.get_text(" ", strip=True))
                 if text:
                     items.append(text)
             elif node.name in ["p", "div"]:
+                if node.find_parent(["li", "table"]):
+                    continue
                 # Keep only leaf-ish containers; lists/tables are handled below.
-                if node.find(["p", "div", "li", "table"], recursive=False):
+                if node.find(["p", "div", "li", "table", "h1", "h2", "h3", "h4", "h5"]):
                     continue
                 text = _clean_candidate_text(node.get_text(" ", strip=True))
                 if text:
@@ -571,14 +586,34 @@ def parse_weekly_soup(soup: BeautifulSoup, url: str) -> List[Dict[str, str]]:
             if items:
                 sections.append((norm_cat or "Misc", items))
 
-    rows: List[Dict[str, str]] = []
+    rows: List[Dict[str, str]] = card_rows
     for cat, items in sections:
         for raw in items:
+            row_cat = cat
             item, details = split_item_details(raw)
-            rows.append({"category": cat, "item": item, "details": details, "source_url": url})
+            if cat == "Prize Ride" and re.match(r"^Prize\s*:", item, re.I):
+                item = re.sub(r"^Prize\s*:\s*", "", item, flags=re.I)
+            elif cat == "Prize Ride" and item.lower().startswith(("place ", "finish ", "win ")):
+                row_cat = "Prize Ride Challenge"
+            rows.append({"category": row_cat, "item": item, "details": details, "source_url": url})
 
     for row in rows:
         row["category"] = recategorize(row["category"], row["item"], row["details"])
+
+    # Narrative vehicle paragraphs become individual entities with the source
+    # sentence retained as context, never a 500-character "vehicle name".
+    from vehicle_intelligence import MANUFACTURERS, VEHICLE_CATEGORIES
+    makes = "|".join(sorted(MANUFACTURERS | {"übermacht", "överflöd"}, key=len, reverse=True))
+    vehicle_pattern = re.compile(rf"\b(?:{makes})\s+[A-Za-zÀ-ž0-9][A-Za-zÀ-ž0-9 '\-]*?(?=\s+(?:as|for|from|and|is|are|with|at|to|has)\b|[,&.!;]|$)", re.I)
+    expanded = []
+    for row in rows:
+        if row["category"] in VEHICLE_CATEGORIES and len(row["item"].split()) > 9:
+            names = vehicle_pattern.findall(row["item"])
+            if names:
+                expanded.extend({**row, "item": name.strip(), "details": row["item"]} for name in names)
+                continue
+        expanded.append(row)
+    rows = expanded
 
     def blocked(value: str) -> bool:
         value = (value or "").lower()

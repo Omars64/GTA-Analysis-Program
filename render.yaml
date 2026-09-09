@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: gta-weekly-intelligence-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 0
+    healthCheckPath: /api/health
+    envVars:
+      - key: GTA_CORS_ORIGINS
+        sync: false

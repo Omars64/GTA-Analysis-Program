@@ -1,39 +1,35 @@
 # Architecture
 
-## Data flow
+## Production flow
 
-```text
-React Dashboard
-  │ POST /api/runs
-  ▼
-Job Manager ── SSE events ───────────────► React live pipeline/logs
-  │
-  ▼
-Weekly Intelligence Engine
-  ├─ Discover: PowerUpGaming / GTABase / RockstarINTEL / manual URL
-  ├─ Extract: structural article parser + retries
-  ├─ Normalize: category/entity normalization
-  ├─ Verify: multi-source consensus + confidence
-  ├─ Enrich: vehicle catalog + source image matching + cached fallback
-  ├─ Persist: history snapshot
-  └─ Export: JSON / PDF / optional SMTP email
-             │
-             ├────────► UI result sections + vehicle gallery
-             └────────► Retrieval Intelligence (Ask This Week)
-```
+React / Vite → same-origin /api → Flask → PostgreSQL
+                                  ↓
+                         Vercel Celery queue
+                                  ↓
+         discover → extract → normalize → enrich → export
 
-## Source of truth
+The backend service uses pyproject.toml as its entrypoint. Its tool.vercel section declares app:app as the public web application and worker:app as a private subscriber. Each task processes one checkpointable unit, then enqueues the next version.
 
-The normalized weekly dataset (`schema_version: 2`) is the source of truth. The UI, PDF, JSON export, history and retrieval engine all consume that dataset. PDF generation is no longer the primary output path.
+## Persistence and recovery
 
-## Cancellation
+Schema version 3 is the shared report format for UI, retrieval, PDF, JSON and email. The gta_records table stores namespaced JSON records. Reads and writes open short-lived PostgreSQL connections; atomic mutations lock the record. Local mode uses equivalent SQLite transactions.
 
-The browser calls `POST /api/runs/<id>/cancel`. The worker owns a cancellation flag and checks it between discovery, source extraction, normalization, enrichment and export stages. Closing the browser request alone is not treated as cancellation.
+Jobs store parameters without SMTP passwords, monotonic event sequences, progress, checkpoint version, owner token and a lease. Duplicate/stale deliveries cannot repeat an already-checkpointed step. Vercel task acknowledgements happen after execution. Local status requests recover expired unfinished jobs after a process restart.
 
-## Confidence
+Cancelling sets a persisted flag. Network calls check cancellation between downloads/chunks, and each phase checks it. An in-flight request may take until its timeout to stop. Queued jobs can be cancelled immediately.
 
-Normalized items track source count, source URLs, source variants, confidence and `verified`. Two or more agreeing sources are marked cross-source verified. A single manual source receives a reasonable confidence floor but is not falsely marked multi-source verified.
+## Network and extraction
 
-## Extending vehicle knowledge
+Fetches validate public HTTP(S) addresses and redirects, reject private addresses, bound response size, apply request timeouts, and share a per-step cache. Windows uses the system certificate store; TLS verification remains enabled.
 
-Add canonical names, aliases, manufacturer/class/store metadata and optional page slugs to `backend/data/vehicle_catalog.json`. No extractor changes are required.
+Discovery supports PowerUpGaming, GTABase and RockstarINTEL. Structured cards, bounded headings, lists and narrative vehicle passages are normalized. Source week ranges must agree before data is merged; stale and inferred dates are flagged. Per-item source URLs and variants remain available.
+
+Vehicle models are deduplicated before enrichment. A catalog supplies known metadata; article images and title-validated vehicle pages provide best-effort images. Model variants are not intentionally collapsed into a similar catalog vehicle.
+
+## Security and exports
+
+Cloud mode requires a strong shared password and PostgreSQL. HTTP-only, Secure, SameSite=Lax cookies authenticate APIs. Mutations check Origin; CORS is opt-in in cloud mode. API responses are not cached. Credentials stay in Vercel server environment variables.
+
+PDF/JSON endpoints regenerate downloads from the authenticated saved snapshot. Temporary Vercel files are not used as durable storage. Email attempts use a persisted delivery claim: an interrupted/ambiguous attempt is not automatically sent twice.
+
+The app is single-owner: everyone with the shared password has access to the same settings, runs and reports.

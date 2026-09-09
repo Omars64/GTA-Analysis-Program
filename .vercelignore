@@ -1,0 +1,13 @@
+.git
+.env*
+.venv
+**/.venv
+**/__pycache__
+**/node_modules
+frontend/dist
+backend/runtime
+backend/config/settings.json
+App_Password_GTA.txt
+New folder
+tests
+*.log

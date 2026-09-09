@@ -1,10 +1,10 @@
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ErrorActionPreference = 'Stop'
 Set-Location "$root\backend"
 if (!(Test-Path .venv)) {
   py -m venv .venv
-  & .\.venv\Scripts\Activate.ps1
-  python -m pip install -r requirements.txt
-} else {
-  & .\.venv\Scripts\Activate.ps1
+  if ($LASTEXITCODE -ne 0) { throw 'Could not create Python environment.' }
 }
-python app.py
+& .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+if ($LASTEXITCODE -ne 0) { throw 'Backend dependency installation failed.' }
+& .\.venv\Scripts\python.exe app.py

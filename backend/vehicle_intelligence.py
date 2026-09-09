@@ -1,12 +1,15 @@
 from __future__ import annotations
 import json
 import re
+import unicodedata
 from difflib import SequenceMatcher
 from pathlib import Path
 from urllib.parse import urljoin
 import requests
 import threading
 from bs4 import BeautifulSoup
+from network import get_soup
+from storage import store
 
 BASE_DIR = Path(__file__).resolve().parent
 CATALOG_FILE = BASE_DIR / "data" / "vehicle_catalog.json"
@@ -25,7 +28,8 @@ MANUFACTURERS = {
 }
 
 def _norm(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).strip()
+    text = unicodedata.normalize("NFKD", text or "").encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
 
 def load_catalog():
     try:
@@ -33,8 +37,19 @@ def load_catalog():
     except Exception:
         return []
 
+
+def vehicle_key(name):
+    tokens = _norm(name).split()
+    if tokens and tokens[0] in MANUFACTURERS:
+        tokens = tokens[1:]
+    if tokens and tokens[0] == "hsw":
+        tokens = tokens[1:]
+    return " ".join(tokens)
+
 def _best_catalog_match(name: str, catalog: list[dict]):
     n = _norm(name)
+    if not n or not re.search(r"[a-z]", n):
+        return None, 0.0
     best, best_score = None, 0.0
     for entry in catalog:
         names = [entry.get("name", ""), *(entry.get("aliases") or [])]
@@ -43,11 +58,11 @@ def _best_catalog_match(name: str, catalog: list[dict]):
             if not c:
                 continue
             score = 1.0 if n == c else SequenceMatcher(None, n, c).ratio()
-            if c in n or n in c:
-                score = max(score, 0.92)
+            if vehicle_key(candidate) == vehicle_key(name):
+                score = 1.0
             if score > best_score:
                 best, best_score = entry, score
-    return (best, best_score) if best_score >= 0.72 else (None, best_score)
+    return (best, best_score) if best_score >= 0.96 else (None, best_score)
 
 def clean_vehicle_name(item: str) -> str:
     text = re.sub(r"^[•\-–—\s]+", "", item or "").strip()
@@ -57,9 +72,13 @@ def clean_vehicle_name(item: str) -> str:
     return text.strip()
 
 def looks_like_vehicle(category: str, item: str, catalog: list[dict]) -> bool:
+    candidate = clean_vehicle_name(item)
+    if not candidate or len(candidate) > 80 or len(candidate.split()) > 9 or not re.search(r"[a-zA-Z]", candidate):
+        return False
+    if _norm(candidate) in {"podium vehicle", "ls car meet prize ride", "luxury autos", "premium deluxe motorsport", "test ride", "premium test ride"}:
+        return False
     if category in VEHICLE_CATEGORIES:
         return True
-    candidate = clean_vehicle_name(item)
     first = _norm(candidate).split(" ")[0] if _norm(candidate) else ""
     if first in MANUFACTURERS:
         return True
@@ -69,9 +88,7 @@ def looks_like_vehicle(category: str, item: str, catalog: list[dict]) -> bool:
 def collect_article_images(url: str, timeout: int = 25):
     images = []
     try:
-        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0 GTAWeeklyCompanion/6.0"}, timeout=timeout)
-        r.raise_for_status()
-        soup = BeautifulSoup(r.text, "html.parser")
+        soup = get_soup(url)
         for img in soup.find_all("img"):
             src = img.get("data-src") or img.get("data-lazy-src") or img.get("src")
             if not src:
@@ -81,11 +98,13 @@ def collect_article_images(url: str, timeout: int = 25):
             if not src:
                 continue
             src = urljoin(url, src)
-            if src.startswith("data:"):
+            if not src.startswith(("https://", "http://")):
                 continue
             alt = " ".join([img.get("alt", ""), img.get("title", "")]).strip()
             parent = img.parent.get_text(" ", strip=True)[:500] if img.parent else ""
             images.append({"url": src, "text": f"{alt} {parent}".strip()})
+    except InterruptedError:
+        raise
     except Exception:
         pass
     return images
@@ -118,10 +137,10 @@ def resolve_gtabase_image(vehicle_name: str, catalog_entry: dict | None = None, 
     It validates the page title against the requested vehicle before accepting og:image,
     so a guessed slug cannot silently attach an unrelated vehicle image.
     """
-    cache = _load_image_cache()
     key = _norm(vehicle_name)
-    if key in cache:
-        return cache[key] or None
+    cached = store.get("images", key)
+    if cached and cached.get("url"):
+        return cached["url"]
     names = []
     if catalog_entry and catalog_entry.get("page_slug"):
         names.append(catalog_entry["page_slug"])
@@ -139,10 +158,7 @@ def resolve_gtabase_image(vehicle_name: str, catalog_entry: dict | None = None, 
     for slug in candidates[:3]:
         url = f"https://www.gtabase.com/grand-theft-auto-v/vehicles/{slug}"
         try:
-            r = requests.get(url, headers={"User-Agent":"Mozilla/5.0 GTAWeeklyCompanion/6.0"}, timeout=timeout)
-            if r.status_code != 200:
-                continue
-            soup = BeautifulSoup(r.text, "html.parser")
+            soup = get_soup(url, timeout=timeout)
             title = soup.title.get_text(" ", strip=True) if soup.title else ""
             target = _norm(cleaned)
             title_norm = _norm(title)
@@ -152,16 +168,15 @@ def resolve_gtabase_image(vehicle_name: str, catalog_entry: dict | None = None, 
                 continue
             meta = soup.find("meta", attrs={"property":"og:image"}) or soup.find("meta", attrs={"name":"twitter:image"})
             image = meta.get("content") if meta else None
-            if image:
+            if image and urljoin(url, image).startswith(("https://", "http://")):
                 result = urljoin(url, image)
                 break
+        except InterruptedError:
+            raise
         except Exception:
             continue
-    cache[key] = result
-    try:
-        _save_image_cache(cache)
-    except Exception:
-        pass
+    if result:
+        store.put("images", key, {"url": result})
     return result
 
 def resolve_image(vehicle_name: str, source_images: list[dict], catalog_entry: dict | None = None):
@@ -193,7 +208,7 @@ def enrich_vehicles(items: list[dict], source_images_by_url: dict[str, list[dict
     for row in items:
         category = row.get("category", "")
         item = row.get("item", "")
-        if not looks_like_vehicle(category, item, catalog):
+        if row.get("entity_type") != "vehicle" and not looks_like_vehicle(category, item, catalog):
             continue
         name = clean_vehicle_name(item)
         if not name or len(name) < 2:

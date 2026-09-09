@@ -1,9 +1,12 @@
+import { useState } from 'react'
+
 export default function VehicleCard({ vehicle }) {
+  const [failedUrl, setFailedUrl] = useState(null)
   return (
     <article className="vehicle-card">
       <div className="vehicle-media">
-        {vehicle.image_url ? (
-          <img src={vehicle.image_url} alt={vehicle.name} loading="lazy" referrerPolicy="no-referrer" />
+        {vehicle.image_url && vehicle.image_url !== failedUrl ? (
+          <img src={vehicle.image_url} alt={vehicle.name} loading="lazy" referrerPolicy="no-referrer" onError={() => setFailedUrl(vehicle.image_url)} />
         ) : (
           <div className="vehicle-placeholder"><span>LS</span><small>IMAGE NOT RESOLVED</small></div>
         )}

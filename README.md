@@ -1,62 +1,72 @@
 # GTA Online Weekly Intelligence Companion
 
-A local-first React + Flask companion application that discovers GTA Online weekly-update sources, extracts and normalizes structured data, cross-validates multiple sources, enriches vehicle entities/images, displays results in an animated dashboard, keeps history, supports retrieval-style queries, and exports PDF/JSON/email from the same dataset.
-
-## What changed from the original scraper
-
-- Background job architecture with real stages, SSE progress events and true cancellation checks.
-- Multi-source extraction + consensus/confidence scoring.
-- Structured weekly JSON is now the source of truth.
-- Vehicle entity enrichment with article-image matching and an extensible local vehicle knowledge catalog.
-- Retrieval-style **Ask This Week** feature grounded in the latest saved dataset.
-- Results and vehicle cards are visible directly in the UI.
-- User-selectable export directory, including a Windows-native folder picker when available.
-- PDF and JSON exports, optional SMTP email, history snapshots and a redesigned GTA-inspired animated UI.
-- Secret password text file removed; app passwords are not persisted by the frontend.
+React + Flask app for discovering GTA Online weekly articles, comparing sources, enriching vehicle information, searching saved reports, and exporting PDF/JSON. Optional SMTP email uses the same report.
 
 ## Run locally
 
-### Backend
+Requirements: Python 3.12 or 3.13, Node.js 22+, and npm.
 
-```bash
-cd backend
-python -m venv .venv
-# Windows: .venv\\Scripts\\activate
-# macOS/Linux: source .venv/bin/activate
-pip install -r requirements.txt
-python app.py
+From PowerShell at the repository root:
+
+```powershell
+py -m pip install -r backend/requirements.txt
+py backend/app.py
 ```
 
-Backend: `http://localhost:5000`
+In a second terminal:
 
-### Frontend
-
-```bash
+```powershell
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
-Frontend: `http://localhost:5173`
+Open the URL printed by Vite (normally http://localhost:5173). The frontend proxies /api to Flask on port 5000. Alternatively run start_companion.ps1, which creates a virtual environment and starts both services in hidden windows with logs in backend/runtime.
 
-## Main API
+Local data uses SQLite at backend/runtime/state.sqlite3. Reports have per-run export directories; existing legacy JSON history remains readable. Do not delete runtime data to update the app.
 
-- `POST /api/runs` — start a background intelligence run
-- `GET /api/runs/<id>` — run state/result
-- `GET /api/runs/<id>/events` — Server-Sent Events progress stream
-- `POST /api/runs/<id>/cancel` — request real cancellation
-- `GET /api/runs/<id>/pdf` / `json` — exports
-- `GET /api/history` / `latest` — stored snapshots
-- `POST /api/knowledge/query` — retrieval-style query against latest weekly data
-- `GET/PUT /api/settings` — local configuration
-- `POST /api/system/select-output-directory` — local native folder picker (best on Windows desktop sessions)
+## Vercel deployment
 
-## Vehicle images / knowledge catalog
+Deploy the **repository root**, not just frontend. Root vercel.json defines the Vite frontend and Python API as Vercel Services. The Python entrypoint must be **pyproject.toml**: this makes Vercel build the Flask app plus the private Celery queue subscriber. Using app:app directly omits the subscriber in Services mode.
 
-The engine first tries metadata in `backend/data/vehicle_catalog.json`, then resolves images from the weekly source article by matching image alt/title/context against extracted vehicle names. If that fails, it performs a cached, title-validated best-effort lookup against a GTA vehicle detail database before falling back to a branded placeholder; it does not silently attach an unverified car image.
+1. Sign in with Vercel CLI 59+ and run vercel link at the repository root.
+2. Create a Neon PostgreSQL database through the Vercel Marketplace and connect it to the project. The current free plan can be selected explicitly; do not enable a paid plan unintentionally.
+3. Configure DATABASE_URL, GTA_APP_PASSWORD (at least 16 characters), and GTA_SESSION_SECRET as server-side secrets for Production and Preview. Use separate databases for preview/production when preview tests should not affect production history.
+4. Run vercel deploy --prod. Later, connect Omars64/GTA-Analysis-Program under Project Settings → Git for automatic deployments from main.
+5. Verify /api/health returns status ok, sign in, run a scan, refresh during the run, and download both exports from History.
 
-The local catalog is deliberately extensible. Add records/aliases/metadata over time without changing the extraction engine.
+No VITE_API_BASE_URL is needed for this same-origin deployment. Never put database or SMTP secrets in VITE_* variables. The app refuses to serve protected APIs if cloud storage or its password is missing.
 
-## Notes
+The generated .env.gta-access.local is a private, gitignored password recovery file. Store it securely; do not share or commit it. scripts/configure_vercel_access.py can generate initial access credentials and send them to the linked Vercel project through stdin without printing their values.
 
-This project is unofficial and is not affiliated with Rockstar Games or Take-Two Interactive. Site layouts can change; the adapter/retry/consensus design is intended to fail gracefully when individual sources change.
+### Optional email
+
+Set SMTP_SERVER, SMTP_PORT (587 STARTTLS or 465 implicit TLS), SMTP_USERNAME, SMTP_PASSWORD, EMAIL_FROM, and optionally EMAIL_TO in Vercel. Redeploy after changing environment variables. Gmail requires an app password rather than the normal account password. Enable “Email PDF” explicitly when running a scan.
+
+Hosted mode never accepts SMTP credentials from the browser. If email is unconfigured, the app disables the email checkbox; PDF/JSON downloads remain available. A failed delivery does not discard the report. Ambiguous email attempts are not automatically resent, to avoid duplicates.
+
+### What persists
+
+PostgreSQL stores jobs, progress events, checkpoints, settings, history, and resolved image URLs. Vercel Queues runs bounded steps with database leases and retries after interrupted delivery. A closed browser does not stop a scan. SSE reconnects automatically, with five-second status polling as fallback.
+
+PDFs are regenerated from saved data when downloaded, rather than stored on Vercel's temporary filesystem. Hosted apps cannot choose folders on your computer: use browser downloads. The Windows folder picker remains available locally.
+
+### Verification
+
+```powershell
+py -m unittest discover -s tests -v
+cd frontend
+npm run build
+```
+
+scripts/verify_live.py exercises the real hosted flow with the private recovery file. It never sends email; it verifies authentication, scanning, persistence, queries, downloads, and a fresh session. Verification exports stay under the ignored backend/runtime/verification directory.
+
+## Limitations and interpretation
+
+- “Verified” means matching item names/categories were found in multiple sources; it is not independent confirmation of every price, restriction, or reward. Consult linked source articles and recorded variants.
+- Source layouts, availability, and image hotlink policies can change. Failures and stale/estimated weeks are shown explicitly. Images have a placeholder fallback.
+- “Ask this week” is retrieval from the selected report, not a general-purpose AI chat or an external paid model.
+- This is a private single-owner companion, not a multi-user SaaS with per-user data isolation.
+- render.yaml is an optional persistent-server alternative; it is not required for the all-Vercel deployment.
+
+This is an unofficial fan project, not affiliated with Rockstar Games or Take-Two Interactive.

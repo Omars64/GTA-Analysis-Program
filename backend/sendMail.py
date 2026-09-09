@@ -85,8 +85,9 @@ def send_email_with_attachment(
         )
         msg.attach(part)
 
-    with smtplib.SMTP(smtp_server, smtp_port) as server:
-        if use_tls:
+    transport = smtplib.SMTP_SSL if smtp_port == 465 else smtplib.SMTP
+    with transport(smtp_server, smtp_port, timeout=30) as server:
+        if use_tls and smtp_port != 465:
             server.starttls()
         server.login(username, password)
         server.sendmail(email_from, recipients_list, msg.as_string())

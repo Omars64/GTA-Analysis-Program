@@ -8,6 +8,7 @@ from datetime import datetime
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Callable, Optional
+from xml.sax.saxutils import escape
 
 from gta_weekly_scraper import (
     find_latest_powerupgaming_weekly_page,
@@ -23,7 +24,7 @@ from gta_weekly_scraper import (
     parse_weekly_generic,
     PRIORITY_ORDER,
 )
-from vehicle_intelligence import collect_article_images, enrich_vehicles
+from vehicle_intelligence import collect_article_images, enrich_vehicles, vehicle_key
 from history_store import save_snapshot
 from sendMail import send_email_with_attachment
 
@@ -130,7 +131,7 @@ def _merge_rows(source_rows: list[tuple[dict, list[dict]]]):
             cat = row.get("category") or "Uncategorized"
             item = (row.get("item") or "").strip()
             details = (row.get("details") or "").strip()
-            nk = _norm(item)
+            nk = vehicle_key(item)
             match = None
             for g in groups:
                 if g["category"] != cat:
@@ -147,12 +148,14 @@ def _merge_rows(source_rows: list[tuple[dict, list[dict]]]):
                     "norm_item": nk,
                     "sources": [],
                     "variants": [],
+                    "entity_type": row.get("entity_type"),
                 }
                 groups.append(match)
             if source["url"] not in [s["url"] for s in match["sources"]]:
                 match["sources"].append({"url": source["url"], "provider": source["provider"], "label": source["label"]})
             if details and len(details) > len(match["details"]):
                 match["details"] = details
+            match["entity_type"] = match["entity_type"] or row.get("entity_type")
             match["variants"].append({"item": item, "details": details, "provider": source["provider"]})
 
     normalized = []
@@ -163,6 +166,7 @@ def _merge_rows(source_rows: list[tuple[dict, list[dict]]]):
             confidence = max(confidence, 0.78)
         normalized.append({
             "category": g["category"],
+            "entity_type": g["entity_type"],
             "item": g["item"],
             "details": g["details"],
             "source_count": count,
@@ -203,12 +207,12 @@ def _write_pdf(dataset: dict, output_dir: str):
     body = ParagraphStyle("GTABody", parent=styles["BodyText"], fontSize=9.5, leading=13)
     story = [Paragraph("GTA Online Weekly Intelligence", title), Paragraph(f"{dataset['week_start']} → {dataset['week_end']} · confidence {round(dataset['overall_confidence']*100)}%", sub), Spacer(1, 10)]
     for category, items in dataset.get("sections", {}).items():
-        story.append(Paragraph(category, head))
+        story.append(Paragraph(escape(category), head))
         rows = [["Item", "Details", "Confidence"]]
         for item in items:
             rows.append([
-                Paragraph(item.get("item") or "—", body),
-                Paragraph(item.get("details") or "", body),
+                Paragraph(escape(item.get("item") or "-"), body),
+                Paragraph(escape(item.get("details") or ""), body),
                 f"{round((item.get('confidence') or 0)*100)}%",
             ])
         table = Table(rows, colWidths=[6.1*cm, 9.1*cm, 1.7*cm], repeatRows=1)
@@ -225,6 +229,11 @@ def _write_pdf(dataset: dict, output_dir: str):
             ("BOTTOMPADDING", (0,0), (-1,-1), 4),
         ]))
         story.extend([table, Spacer(1, 7)])
+    story.append(Paragraph("Sources", head))
+    for source in dataset.get("sources", []):
+        story.append(Paragraph(escape(source.get("url", "")), body))
+    for warning in dataset.get("warnings", []):
+        story.append(Paragraph(escape(warning), body))
     doc.build(story)
     return path
 
