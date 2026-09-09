@@ -9,6 +9,7 @@ export default function ReportEditor({ report, onSave, emailConfigured }) {
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [delivery, setDelivery] = useState(null)
+  const [emailOpen, setEmailOpen] = useState(false)
   async function save() {
     setBusy(true); setMessage('')
     try {
@@ -30,17 +31,17 @@ export default function ReportEditor({ report, onSave, emailConfigured }) {
   return <section className="glass-panel control-panel">
     <h3>Report document · revision {report.revision || 0}</h3>
     <p>Review the fetched data below. Edit individual items and describe your changes before saving. Human corrections retain the original evidence and are not marked source-verified.</p>
-    <div className="export-actions">
-      <button onClick={() => { setRows(report.items.map(r => ({ ...r }))); setEditing(!editing) }} disabled={busy}>{editing ? 'Cancel editing' : 'Edit report'}</button>
+    <div className="export-actions report-actions">
+      <button onClick={() => { setRows((report.items || []).map(r => ({ ...r }))); setEditing(!editing) }} disabled={busy}>{editing ? 'Cancel editing' : 'Edit report'}</button>
       {!editing && <>{(report.exports?.pdf ?? report.pdf_path) && <a href={exportUrl(report.id, 'pdf')}>Download PDF</a>}{(report.exports?.json ?? report.json_path) && <a href={exportUrl(report.id, 'json')}>Download JSON</a>}</>}
+      <button onClick={() => setEmailOpen(v => !v)} aria-expanded={emailOpen} disabled={busy || editing || !emailConfigured}>Email PDF</button>
     </div>
     {editing && <>
       {rows.map((row, i) => <fieldset key={i}><legend>Item {i + 1}</legend>{['category', 'item', 'details'].map(key => <label key={key}>{key}<textarea rows={key === 'details' ? 2 : 1} maxLength={2000} value={row[key] || ''} onChange={e => setRows(current => current.map((r, j) => j === i ? { ...r, [key]: e.target.value } : r))} /></label>)}</fieldset>)}
       <label>Describe your changes<textarea maxLength={2000} value={note} onChange={e => setNote(e.target.value)} /></label>
       <button className="primary-btn" onClick={save} disabled={busy}>Save corrections</button>
     </>}
-    <label>Email this saved report<input aria-label="Report email recipients" placeholder="Recipient email, or comma-separated recipients" value={recipient} onChange={e => { setRecipient(e.target.value); setDelivery(null) }} /></label>
-    <button onClick={send} disabled={busy || editing || !emailConfigured || !recipient.trim()}>Email PDF</button>
+    {emailOpen && <div className="report-email"><label>Email this saved report<input aria-label="Report email recipients" placeholder="Recipient email, or comma-separated recipients" value={recipient} onChange={e => { setRecipient(e.target.value); setDelivery(null) }} /></label><button className="primary-btn" onClick={send} disabled={busy || editing || !recipient.trim()}>{busy ? 'Sending…' : 'Send report'}</button></div>}
     {!emailConfigured && <p>Email server configuration is required.</p>}
     {message && <p role="status">{message}</p>}
   </section>

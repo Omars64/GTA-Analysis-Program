@@ -42,6 +42,10 @@ def vehicle_key(name):
     tokens = _norm(name).split()
     if tokens and tokens[0] in MANUFACTURERS:
         tokens = tokens[1:]
+        if tokens[:2] == ['motorcycle', 'company']:
+            tokens = tokens[2:]
+        elif tokens and tokens[0] == 'company':
+            tokens = tokens[1:]
     if tokens and tokens[0] == "hsw":
         tokens = tokens[1:]
     return " ".join(tokens)
@@ -73,6 +77,8 @@ def clean_vehicle_name(item: str) -> str:
 
 def looks_like_vehicle(category: str, item: str, catalog: list[dict]) -> bool:
     candidate = clean_vehicle_name(item)
+    if re.search(r'\b(place top|win .*(?:race|series)|for .*days|complete .*challenge)\b', candidate, re.I):
+        return False
     if not candidate or len(candidate) > 80 or len(candidate.split()) > 9 or not re.search(r"[a-zA-Z]", candidate):
         return False
     if _norm(candidate) in {"podium vehicle", "ls car meet prize ride", "luxury autos", "premium deluxe motorsport", "test ride", "premium test ride"}:
@@ -205,10 +211,17 @@ def enrich_vehicles(items: list[dict], source_images_by_url: dict[str, list[dict
     catalog = load_catalog()
     vehicles = []
     seen = set()
+    expanded = []
     for row in items:
+        parts = re.split(r',\s*(?:and\s+)?|\s+and\s+', row.get('item', ''))
+        if len(parts) > 1 and all(_norm(p).split(' ')[0] in MANUFACTURERS for p in parts):
+            expanded.extend({**row, 'item': part.strip()} for part in parts)
+        else:
+            expanded.append(row)
+    for row in expanded:
         category = row.get("category", "")
         item = row.get("item", "")
-        if row.get("entity_type") != "vehicle" and not looks_like_vehicle(category, item, catalog):
+        if not looks_like_vehicle(category, item, catalog):
             continue
         name = clean_vehicle_name(item)
         if not name or len(name) < 2:

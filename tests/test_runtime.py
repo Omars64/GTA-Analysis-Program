@@ -76,6 +76,17 @@ class RuntimeTests(unittest.TestCase):
         self.assertTrue(self.client.get(f'/api/history/{job.id}/pdf').data.startswith(b'%PDF'))
         self.assertEqual(self.client.put(f'/api/history/{job.id}', json={'revision': 0, 'edits': []}).status_code, 400)
 
+    def test_game_limit_and_vehicle_endpoint(self):
+        for invalid in (0, 7, 20, True, 5.5):
+            self.assertEqual(self.client.put('/api/settings', json={'game_number': invalid}).status_code, 400)
+        self.assertEqual(self.client.put('/api/settings', json={'game_number': 6}).json['game_number'], 6)
+        self.store.put('history', 'profile-test', {'vehicles': [{'name': 'Declasse Impaler SZ'}]})
+        with patch('vehicle_profiles.get_profile', return_value={'available': True}) as lookup:
+            self.assertTrue(self.client.get('/api/history/profile-test/vehicles/0').json['available'])
+            lookup.assert_called_once_with('Declasse Impaler SZ')
+        self.assertEqual(self.client.get('/api/history/profile-test/vehicles/1').status_code, 404)
+        self.assertEqual(self.client.get('/api/history/missing/vehicles/0').status_code, 404)
+
     def test_saved_report_email_is_idempotent(self):
         job = self.scan()
         with patch.dict(os.environ, {'SMTP_USERNAME': 'owner@example.com', 'SMTP_PASSWORD': 'test-only'}), patch.object(api_module, 'send_email_with_attachment') as send:

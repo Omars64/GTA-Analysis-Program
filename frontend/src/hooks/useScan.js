@@ -14,10 +14,8 @@ export default function useScan() {
     const controller = new AbortController()
     async function restore() {
       try {
-        const { data } = await api.get('/runs/active', { signal: controller.signal })
-        if (data.id) { setJob(data); return }
         let lastId
-        try { lastId = localStorage.getItem('gta.last-run.v1') } catch { /* Storage can be disabled. */ }
+        try { lastId = sessionStorage.getItem('gta.session-run') } catch { /* Storage can be disabled. */ }
         if (lastId) {
           try { setJob((await api.get(`/runs/${encodeURIComponent(lastId)}`, { signal: controller.signal })).data) }
           catch (e) { if (e.response?.status !== 404) throw e }
@@ -33,7 +31,7 @@ export default function useScan() {
   const running = Boolean(job && !terminal(job.status))
   useEffect(() => {
     if (!jobId) return
-    try { localStorage.setItem('gta.last-run.v1', jobId) } catch { /* Recovery also works through /active. */ }
+    try { sessionStorage.setItem('gta.session-run', jobId) } catch { /* Storage can be disabled. */ }
     if (!running) return
     const controller = new AbortController()
     let stream
@@ -77,7 +75,7 @@ export default function useScan() {
   }, [jobId, running])
 
   const start = useCallback(async payload => {
-    setStarting(true); setError('')
+    setStarting(true); setError(''); setJob(null)
     try { setJob((await api.post('/runs', payload)).data) }
     catch (e) { if (e.response?.data?.job) setJob(e.response.data.job); setError(errorMessage(e)) }
     finally { setStarting(false) }

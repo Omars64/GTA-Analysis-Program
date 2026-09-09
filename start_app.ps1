@@ -12,5 +12,5 @@ foreach ($service in @('backend', 'frontend')) {
   $script = Join-Path $root "start_$service.ps1"
   Start-Process powershell.exe -WindowStyle Hidden -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',('"' + $script + '"') -RedirectStandardOutput (Join-Path $runtime "$service-$stamp.log") -RedirectStandardError (Join-Path $runtime "$service-$stamp-error.log")
 }
-Write-Host "Starting the companion. Logs: $runtime"
+Write-Host "Starting GTA Intelligence. Logs: $runtime"
 Write-Host 'Open http://localhost:5173 once both services are ready.'

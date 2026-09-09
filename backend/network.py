@@ -54,7 +54,7 @@ def get_soup(url, timeout=None):
         seconds = timeout or (ctx["timeout"] if ctx else 20)
         if ctx:
             seconds = max(.1, min(seconds, ctx["deadline"] - time.monotonic()))
-        with requests.get(url, headers={"User-Agent": "Mozilla/5.0 (compatible; GTAWeeklyCompanion/7.0)", "Accept-Language": "en-US,en;q=0.9"}, timeout=seconds, allow_redirects=False, stream=True) as response:
+        with requests.get(url, headers={"User-Agent": "Mozilla/5.0 (compatible; GTAIntelligence/7.0)", "Accept-Language": "en-US,en;q=0.9"}, timeout=seconds, allow_redirects=False, stream=True) as response:
             if response.is_redirect:
                 url = urljoin(url, response.headers["Location"])
                 continue

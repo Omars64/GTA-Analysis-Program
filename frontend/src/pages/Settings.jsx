@@ -27,7 +27,7 @@ export default function Settings() {
     catch (e) { setError(e.response?.data?.error || 'Folder picker unavailable; enter the path manually.') }
   }
   return <div className="dashboard-stack">
-    <section className="page-title"><span className="eyebrow">SYSTEM</span><h2>Companion settings</h2><p>Export preferences and extraction resilience. Settings persist across sessions.</p></section>
+    <section className="page-title"><span className="eyebrow">SYSTEM</span><h2>Settings</h2><p>Source preferences and extraction resilience. Settings persist across sessions.</p></section>
     {error && <div className="error-banner" role="alert">{error}{!settings && <button onClick={() => setRetry(v => v + 1)}>Retry</button>}</div>}
     {!settings ? <div className="empty-state glass-panel">{error ? 'Settings unavailable.' : 'Loading settings…'}</div> :
       <form className="settings-card glass-panel" onSubmit={save}>
@@ -35,13 +35,12 @@ export default function Settings() {
           <label htmlFor="settings-output">Output directory</label><div className="input-action"><input id="settings-output" value={settings.output_directory} onChange={e => setSettings(s => ({ ...s, output_directory: e.target.value }))} />{capabilities?.native_folder_picker && <button type="button" onClick={browse}>Browse</button>}</div>
         </>}
         <div className="settings-two">
-          <label>GTA logo number<input type="number" required min="1" max="20" value={settings.game_number ?? 5} onChange={e => setSettings(s => ({ ...s, game_number: Number(e.target.value) }))} /></label>
+          <label>GTA logo number<input type="number" required min="1" max="6" value={settings.game_number ?? 5} onChange={e => setSettings(s => ({ ...s, game_number: Number(e.target.value) }))} /></label>
           <label>Source retry attempts<input type="number" required min="1" max="3" value={settings.source_retries} onChange={e => setSettings(s => ({ ...s, source_retries: Number(e.target.value) }))} /></label>
           <label>Request timeout (seconds)<input type="number" required min="5" max="60" value={settings.request_timeout} onChange={e => setSettings(s => ({ ...s, request_timeout: Number(e.target.value) }))} /></label>
           <label>Default history list size<input type="number" required min="1" max="200" value={settings.history_limit} onChange={e => setSettings(s => ({ ...s, history_limit: Number(e.target.value) }))} /></label>
         </div>
         <label>Default source URLs (one per line)<textarea rows="5" value={(settings.source_urls || []).join('\n')} onChange={e => setSettings(s => ({ ...s, source_urls: e.target.value.split('\n') }))} /></label>
-        <div className="toggle-row"><label className="check"><input type="checkbox" checked={settings.generate_pdf} onChange={e => setSettings(s => ({ ...s, generate_pdf: e.target.checked }))} /> Generate PDF by default</label><label className="check"><input type="checkbox" checked={settings.save_json} onChange={e => setSettings(s => ({ ...s, save_json: e.target.checked }))} /> Enable JSON export</label></div>
         <button className="primary-btn" disabled={saving}>{saving ? 'SAVING…' : 'SAVE SETTINGS'}</button>{message && <div className="notice-banner" role="status">{message}</div>}
       </form>}
   </div>

@@ -25,6 +25,7 @@ def get_settings():
         except (OSError, ValueError):
             saved = {}
     result = {**DEFAULTS, **(saved or {})}
+    result['game_number'] = min(6, max(1, int(result.get('game_number', 5))))
     if cloud_mode():
         result["output_directory"] = str(DEFAULT_EXPORT_DIR)
     return result
@@ -32,7 +33,7 @@ def get_settings():
 
 def update_settings(patch):
     clean = {key: value for key, value in patch.items() if key in DEFAULTS}
-    for key, low, high in [("game_number", 1, 20), ("request_timeout", 5, 60), ("source_retries", 1, 3), ("history_limit", 1, 200)]:
+    for key, low, high in [("game_number", 1, 6), ("request_timeout", 5, 60), ("source_retries", 1, 3), ("history_limit", 1, 200)]:
         if key in clean and (type(clean[key]) is not int or not low <= clean[key] <= high):
             raise ValueError(f"{key} must be an integer between {low} and {high}.")
     for key in ("generate_pdf", "save_json"):

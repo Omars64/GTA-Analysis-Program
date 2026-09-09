@@ -1,4 +1,4 @@
-# GTA Online Weekly Intelligence Companion
+# GTA Intelligence
 
 React + Flask app for discovering GTA Online weekly articles, comparing sources, enriching vehicle information, searching saved reports, and exporting PDF/JSON. Optional SMTP email uses the same report.
 
@@ -21,7 +21,7 @@ npm ci
 npm run dev
 ```
 
-Open the URL printed by Vite (normally http://localhost:5173). The frontend proxies /api to Flask on port 5000. Alternatively run start_companion.ps1, which creates a virtual environment and starts both services in hidden windows with logs in backend/runtime.
+Open the URL printed by Vite (normally http://localhost:5173). The frontend proxies /api to Flask on port 5000. Alternatively run start_app.ps1, which creates a virtual environment and starts both services in hidden windows with logs in backend/runtime.
 
 Local data uses SQLite at backend/runtime/state.sqlite3. Reports have per-run export directories; existing legacy JSON history remains readable. Do not delete runtime data to update the app.
 
@@ -70,7 +70,7 @@ scripts/verify_live.py exercises the real hosted flow with the private recovery 
 - “Verified” means matching item names/categories were found in multiple sources; it is not independent confirmation of every price, restriction, or reward. Consult linked source articles and recorded variants.
 - Source layouts, availability, and image hotlink policies can change. Failures and stale/estimated weeks are shown explicitly. Images have a placeholder fallback.
 - “Ask this week” is retrieval from the selected report, not a general-purpose AI chat or an external paid model.
-- This is a private single-owner companion, not a multi-user SaaS with per-user data isolation.
+- This is a private single-owner application, not a multi-user SaaS with per-user data isolation.
 - render.yaml is an optional persistent-server alternative; it is not required for the all-Vercel deployment.
 
 This is an unofficial fan project, not affiliated with Rockstar Games or Take-Two Interactive.

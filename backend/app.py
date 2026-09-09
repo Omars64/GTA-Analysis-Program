@@ -69,7 +69,7 @@ def protect_api():
     if setup_missing():
         return jsonify(error="Cloud setup is incomplete.", missing=setup_missing()), 503
     if password and not session.get("authenticated"):
-        return jsonify(error="Sign in to use your companion."), 401
+        return jsonify(error="Sign in to use GTA Intelligence."), 401
 
 
 @app.after_request
@@ -259,6 +259,16 @@ def history_export(snapshot_id, kind):
 def history_item(snapshot_id):
     data = get_snapshot(snapshot_id)
     return (jsonify(data), 200) if data else (jsonify(error="Report not found"), 404)
+
+
+@app.get('/api/history/<snapshot_id>/vehicles/<int:index>')
+def vehicle_profile(snapshot_id, index):
+    data = get_snapshot(snapshot_id)
+    vehicles = data.get('vehicles', []) if data else []
+    if not 0 <= index < len(vehicles):
+        return jsonify(error='Vehicle not found'), 404
+    from vehicle_profiles import get_profile
+    return jsonify(get_profile(vehicles[index]['name']))
 
 
 @app.put('/api/history/<snapshot_id>')
