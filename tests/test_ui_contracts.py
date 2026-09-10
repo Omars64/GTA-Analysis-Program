@@ -8,6 +8,8 @@ from bs4 import BeautifulSoup
 from knowledge_engine import answer_query
 from vehicle_intelligence import enrich_vehicles, looks_like_vehicle
 from vehicle_profiles import parse_profile, get_profile, BASES
+from vehicle_directory import _parse_directory
+from workspace_features import weekly_plan
 
 
 class InterfaceContracts(unittest.TestCase):
@@ -44,6 +46,13 @@ class InterfaceContracts(unittest.TestCase):
         with patch('vehicle_intelligence.resolve_image', return_value=(None, 'placeholder')):
             rows = enrich_vehicles([{'category': 'Test Rides', 'item': 'Pfister Astron, Ocelot Jugular, and Canis Kamacho'}], {})
         self.assertEqual([r['name'] for r in rows], ['Pfister Astron', 'Ocelot Jugular', 'Canis Kamacho'])
+
+    def test_vehicle_directory_and_wishlist_plan(self):
+        soup = BeautifulSoup('<a href="/grand-theft-auto-v/vehicles/zentorno">Pegassi Zentorno</a><a href="/grand-theft-auto-v/vehicles/virtue">Ocelot Virtue</a>', 'html.parser')
+        items = _parse_directory(soup)
+        self.assertEqual([item['name'] for item in items], ['Pegassi Zentorno', 'Ocelot Virtue'])
+        plan = weekly_plan({'wishlist': ['Zentorno'], 'businesses': [], 'available_hours': 4}, {'sections': {'Discounts': [{'item': 'Pegassi Zentorno', 'details': '40% off'}]}})
+        self.assertTrue(any(task['title'] == 'Wishlist discount alert' for task in plan['tasks']))
 
     def test_sourced_profile_and_wrong_model(self):
         soup = BeautifulSoup('''<title>Declasse Impaler SZ | GTA 5 Online Vehicle Stats, Price, How To Get</title>

@@ -35,6 +35,11 @@ from network import validate_url
 from storage import cloud_mode, store
 from report_editor import revise
 from sendMail import send_email_with_attachment
+from vehicle_directory import search_directory
+from vehicle_profiles import get_profile
+from workspace_features import get_workspace, save_workspace, weekly_plan
+from news import get_news
+import requests
 
 app = Flask(__name__)
 password = os.getenv("GTA_APP_PASSWORD", "")
@@ -65,6 +70,11 @@ def protect_api():
         if not same_origin and origin not in origins:
             return jsonify(error="Origin is not allowed."), 403
     if request.path in {"/api/health", "/api/session"} or request.method == "OPTIONS":
+        return
+    if request.path == "/api/cron/weekly-digest":
+        expected = os.getenv("CRON_SECRET")
+        if not expected or request.headers.get("Authorization") != f"Bearer {expected}":
+            return jsonify(error="Unauthorized"), 401
         return
     if setup_missing():
         return jsonify(error="Cloud setup is incomplete.", missing=setup_missing()), 503
@@ -124,6 +134,105 @@ def capabilities():
     return jsonify(cloud=cloud_mode(), native_folder_picker=not cloud_mode() and os.name == "nt",
                    email_configured=bool(os.getenv("SMTP_USERNAME") and os.getenv("SMTP_PASSWORD")),
                    email_recipients_configured=bool(os.getenv("EMAIL_TO")))
+
+
+def _public_workspace(data):
+    public = {**data, "notifications": {**data.get("notifications", {})}}
+    webhook = public["notifications"].get("discord_webhook", "")
+    public["notifications"]["discord_webhook"] = ""
+    public["notifications"]["discord_webhook_configured"] = bool(webhook)
+    return public
+
+
+@app.get("/api/vehicles")
+def vehicles():
+    query = request.args.get("q", "")
+    manufacturer = request.args.get("manufacturer", "")
+    refresh = request.args.get("refresh") == "1"
+    if len(query) > 120 or len(manufacturer) > 80:
+        raise ValueError("Vehicle search is too long.")
+    return jsonify(search_directory(query, manufacturer, refresh=refresh))
+
+
+@app.get("/api/vehicles/profile")
+def vehicle_catalog_profile():
+    name = request.args.get("name", "").strip()
+    if not name or len(name) > 120:
+        raise ValueError("Choose a vehicle from the directory.")
+    return jsonify(get_profile(name))
+
+
+@app.get("/api/workspace")
+def workspace_get():
+    return jsonify(_public_workspace(get_workspace()))
+
+
+@app.put("/api/workspace")
+def workspace_put():
+    return jsonify(_public_workspace(save_workspace(body())))
+
+
+@app.get("/api/plan")
+def workspace_plan():
+    return jsonify(weekly_plan(get_workspace(), latest_snapshot()))
+
+
+@app.get("/api/news")
+def news_index():
+    return jsonify(get_news(refresh=request.args.get("refresh") == "1"))
+
+
+def _send_workspace_digest(workspace):
+    report = latest_snapshot()
+    if not report:
+        raise ValueError("Run a weekly scan before sending a digest.")
+    notifications = workspace.get("notifications", {})
+    sent = []
+    recipients = notifications.get("email_recipients") or []
+    if notifications.get("email_enabled") and recipients:
+        with tempfile.TemporaryDirectory(prefix="gta-digest-") as output:
+            path = _write_pdf(report, output)
+            send_email_with_attachment(subject=f"GTA Intelligence digest {report['week_start']}", body="Your saved GTA Intelligence weekly digest is attached.", attachment_path=path, recipients=recipients)
+        sent.append("email")
+    webhook = notifications.get("discord_webhook")
+    if notifications.get("discord_enabled") and webhook:
+        response = requests.post(webhook, json={"content": f"GTA Intelligence: the {report['week_start']}–{report['week_end']} report is ready. {request.host_url.rstrip('/')}/?snapshot={report['id']}"}, timeout=15)
+        response.raise_for_status()
+        sent.append("discord")
+    return sent
+
+
+@app.post("/api/notifications/send")
+def send_workspace_digest():
+    sent = _send_workspace_digest(get_workspace())
+    return jsonify(sent=sent, message="No enabled destination was configured." if not sent else "Digest delivery accepted.")
+
+
+@app.post("/api/crew/send")
+def send_crew_plan():
+    workspace = get_workspace()
+    webhook = workspace.get("notifications", {}).get("discord_webhook")
+    crew = workspace.get("crew", {})
+    if not webhook:
+        raise ValueError("Save a Discord webhook in the Intel Hub first.")
+    if not crew.get("name") and not crew.get("notes"):
+        raise ValueError("Add a crew session name or notes first.")
+    content = f"Crew session: {crew.get('name') or 'GTA session'}\nWhen: {crew.get('date') or 'Not scheduled'}\nNotes: {crew.get('notes') or 'No notes'}"
+    response = requests.post(webhook, json={"content": content[:1900]}, timeout=15)
+    response.raise_for_status()
+    return jsonify(sent=True)
+
+
+@app.get("/api/cron/weekly-digest")
+def cron_weekly_digest():
+    expected = os.getenv("CRON_SECRET")
+    if not expected or request.headers.get("Authorization") != f"Bearer {expected}":
+        return jsonify(error="Unauthorized"), 401
+    try:
+        sent = _send_workspace_digest(get_workspace())
+        return jsonify(sent=sent)
+    except ValueError as exc:
+        return jsonify(sent=[], skipped=str(exc))
 
 
 def _params(data):

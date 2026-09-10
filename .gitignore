@@ -28,6 +28,7 @@ backend/runtime/*.sqlite3*
 backend/runtime/jobs/
 backend/runtime/verification/
 backend/runtime/*.log
+test-tmp/
 
 # IDE / OS
 .vscode/

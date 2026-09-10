@@ -5,7 +5,7 @@ This avoids the automatically injected bundled adapter's missing vendored HTTP
 dependency. CI runs `python scripts/check_queue_runtime.py` to check the same
 worker discovery/import path used by Vercel, without publishing any messages.
 
-React + Flask app for discovering GTA Online weekly articles, comparing sources, enriching vehicle information, searching saved reports, and exporting PDF/JSON. Optional SMTP email uses the same report.
+React + Flask app for discovering GTA Online weekly articles, comparing sources, enriching vehicle information, searching saved reports, and exporting PDF/JSON. The private Intel Hub adds a garage, wishlist, businesses, weekly checklist/planner, crew-session notes, official Rockstar Newswire links, vehicle comparison, and opt-in email/Discord digest delivery. Optional SMTP email uses the same report.
 
 ## Run locally
 
@@ -36,7 +36,7 @@ Deploy the **repository root**, not just frontend. Root vercel.json defines the 
 
 1. Sign in with Vercel CLI 59+ and run vercel link at the repository root.
 2. Create a Neon PostgreSQL database through the Vercel Marketplace and connect it to the project. The current free plan can be selected explicitly; do not enable a paid plan unintentionally.
-3. Configure DATABASE_URL, GTA_APP_PASSWORD (at least 14 characters), and GTA_SESSION_SECRET as server-side secrets for Production and Preview. Use separate databases for preview/production when preview tests should not affect production history.
+3. Configure DATABASE_URL, GTA_APP_PASSWORD (at least 14 characters), GTA_SESSION_SECRET, and a random CRON_SECRET as server-side secrets for Production and Preview. Use separate databases for preview/production when preview tests should not affect production history.
 4. The connected Omars64/GTA-Analysis-Program repository deploys main automatically through Vercel's Git integration. The GitHub Actions workflow runs backend tests and the frontend build on pushes and pull requests. These checks run independently of Vercel deployment; configure required checks in branch protection if you need to prevent merging failing changes. For a manual deployment, run vercel deploy --prod.
 5. Verify /api/health returns status ok, sign in, run a scan, refresh during the run, and download both exports from History.
 
@@ -49,6 +49,12 @@ The generated .env.gta-access.local is a private, gitignored password recovery f
 Set SMTP_SERVER, SMTP_PORT (587 STARTTLS or 465 implicit TLS), SMTP_USERNAME, SMTP_PASSWORD, EMAIL_FROM, and optionally EMAIL_TO in Vercel. Redeploy after changing environment variables. Gmail requires an app password rather than the normal account password. Enable “Email PDF” explicitly when running a scan.
 
 Hosted mode never accepts SMTP credentials from the browser. If email is unconfigured, the app disables the email checkbox; PDF/JSON downloads remain available. A failed delivery does not discard the report. Ambiguous email attempts are not automatically resent, to avoid duplicates.
+
+### Intel Hub and vehicle browser
+
+The Vehicles screen queries a cached GTABase GTA V/Online directory on demand, filters by model or manufacturer, and loads specification cards lazily. Vehicle detail requests are source-linked and show a clear unavailable state instead of inventing missing values. The comparison action loads up to three sourced profiles side by side.
+
+The Intel Hub stores only the private profile fields needed for personalization. Rockstar account linking is represented by an official account-connections link; the app does not ask for Rockstar passwords, cookies, or session tokens. Digest delivery is opt-in: enable email or Discord, save a destination, and use Send digest now for an explicit test. A production-only Vercel cron runs the same digest on Monday at 08:00 UTC when `CRON_SECRET` and a destination are configured.
 
 ### What persists
 
@@ -74,7 +80,7 @@ scripts/verify_live.py exercises the real hosted flow with the private recovery 
 
 - “Verified” means matching item names/categories were found in multiple sources; it is not independent confirmation of every price, restriction, or reward. Consult linked source articles and recorded variants.
 - Source layouts, availability, and image hotlink policies can change. Failures and stale/estimated weeks are shown explicitly. Images have a placeholder fallback.
-- “Ask this week” is retrieval from the selected report, not a general-purpose AI chat or an external paid model.
+- “Find specifics” is retrieval from the selected report, not a general-purpose AI chat or an external paid model.
 - This is a private single-owner application, not a multi-user SaaS with per-user data isolation.
 - render.yaml is an optional persistent-server alternative; it is not required for the all-Vercel deployment.
 

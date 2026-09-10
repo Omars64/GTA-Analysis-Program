@@ -28,6 +28,8 @@ export default function Layout({ children }) {
         <nav className="nav-tabs">
           <NavLink to="/" end>Dashboard</NavLink>
           <NavLink to="/history">History</NavLink>
+          <NavLink to="/vehicles">Vehicles</NavLink>
+          <NavLink to="/hub">Intel Hub</NavLink>
           <NavLink to="/settings">Settings</NavLink>
           <button className="nav-signout" onClick={auth?.signOut} disabled={auth?.busy}>{auth?.busy ? 'Signing out…' : 'Sign out'}</button>
         </nav>

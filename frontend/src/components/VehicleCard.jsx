@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import api from '../api/client.js'
 
-export default function VehicleCard({ vehicle, reportId, index }) {
+export default function VehicleCard({ vehicle, reportId, index, profileName }) {
   const [failed, setFailed] = useState([])
   const [profile, setProfile] = useState(null)
   const [requested, setRequested] = useState(false)
@@ -20,10 +20,11 @@ export default function VehicleCard({ vehicle, reportId, index }) {
     return () => observer.disconnect()
   }, [])
   useEffect(() => {
-    if (!needsProfile || !reportId) return
+    if (!needsProfile || (!reportId && !profileName)) return
     const controller = new AbortController()
     setLoading(true); setError('')
-    api.get(`/history/${encodeURIComponent(reportId)}/vehicles/${index}`, { signal: controller.signal, timeout: 35000 })
+    const request = reportId ? api.get(`/history/${encodeURIComponent(reportId)}/vehicles/${index}`, { signal: controller.signal, timeout: 35000 }) : api.get('/vehicles/profile', { params: { name: profileName || vehicle.name }, signal: controller.signal, timeout: 35000 })
+    request
       .then(({ data }) => setProfile(data))
       .catch(e => { if (!controller.signal.aborted) setError(e.response?.data?.error || 'Vehicle details could not be loaded.') })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
@@ -36,10 +37,10 @@ export default function VehicleCard({ vehicle, reportId, index }) {
       <button className="vehicle-open" onClick={open} aria-label={`View ${vehicle.name} specifications`}>
       <div className="vehicle-media">
         {media}
-        <span className="vehicle-role">{vehicle.category}</span>
+        <span className="vehicle-role">{vehicle.category || vehicle.vehicle_class || 'GTA V / Online'}</span>
       </div>
       <div className="vehicle-body">
-        <div className="vehicle-title-row"><h3>{vehicle.name}</h3><span className={vehicle.verified ? 'verified-chip' : 'confidence-chip'}>{Math.round((vehicle.confidence || 0) * 100)}%</span></div>
+        <div className="vehicle-title-row"><h3>{vehicle.name}</h3>{vehicle.confidence != null && <span className={vehicle.verified ? 'verified-chip' : 'confidence-chip'}>{Math.round((vehicle.confidence || 0) * 100)}%</span>}</div>
         <p>{vehicle.details || 'Detected in this week’s update.'}</p>
         <div className="vehicle-meta">
           <span>{vehicle.manufacturer || 'Unknown maker'}</span>

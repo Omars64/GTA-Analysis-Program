@@ -1,7 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [{ "path": "/api/cron/weekly-digest", "schedule": "0 8 * * 1" }],
   "services": {
-    "web": { "root": "frontend", "rewrites": [{ "source": "/settings", "destination": "/index.html" }, { "source": "/history", "destination": "/index.html" }] },
+    "web": { "root": "frontend", "rewrites": [{ "source": "/settings", "destination": "/index.html" }, { "source": "/history", "destination": "/index.html" }, { "source": "/vehicles", "destination": "/index.html" }, { "source": "/hub", "destination": "/index.html" }] },
     "api": {
       "root": "backend",
       "entrypoint": "pyproject.toml",
@@ -12,6 +13,8 @@
     { "source": "/api/(.*)", "destination": { "service": "api" } },
     { "source": "/settings", "destination": { "service": "web", "path": "/index.html" } },
     { "source": "/history", "destination": { "service": "web", "path": "/index.html" } },
+    { "source": "/vehicles", "destination": { "service": "web", "path": "/index.html" } },
+    { "source": "/hub", "destination": { "service": "web", "path": "/index.html" } },
     { "source": "/(.*)", "destination": { "service": "web" } }
   ]
 }
