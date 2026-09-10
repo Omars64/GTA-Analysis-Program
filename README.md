@@ -1,5 +1,10 @@
 # GTA Intelligence
 
+Queue deployments explicitly use `vercel-celery==0.7.4` and `vercel-queue==0.8.1`.
+This avoids the automatically injected bundled adapter's missing vendored HTTP
+dependency. CI runs `python scripts/check_queue_runtime.py` to check the same
+worker discovery/import path used by Vercel, without publishing any messages.
+
 React + Flask app for discovering GTA Online weekly articles, comparing sources, enriching vehicle information, searching saved reports, and exporting PDF/JSON. Optional SMTP email uses the same report.
 
 ## Run locally
