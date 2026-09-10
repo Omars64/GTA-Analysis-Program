@@ -7,10 +7,24 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'backend'))
 from bs4 import BeautifulSoup
 from knowledge_engine import answer_query
 from vehicle_intelligence import enrich_vehicles, looks_like_vehicle
-from vehicle_profiles import parse_profile
+from vehicle_profiles import parse_profile, get_profile, BASES
 
 
 class InterfaceContracts(unittest.TestCase):
+    def test_current_and_legacy_vehicle_urls(self):
+        for name, expected in [('Karin Woodlander', BASES[0] + 'woodlander'), ('Western Company Seabreeze', BASES[1] + 'western-seabreeze')]:
+            soup = BeautifulSoup(f'<title>{name} | GTA 5 Online Vehicle Stats</title><meta property="og:image" content="https://example.com/vehicle.jpg">', 'html.parser')
+            def fetch(url):
+                if url == expected:
+                    return soup
+                raise ValueError('Page not found')
+            with patch('vehicle_profiles.store') as storage, patch('vehicle_profiles.get_soup', side_effect=fetch):
+                storage.get.return_value = {'available': False, 'checked_at': 9999999999}
+                profile = get_profile(name)
+            self.assertTrue(profile['available'])
+            self.assertEqual(profile['source_url'], expected)
+            self.assertTrue(profile['image_urls'])
+
     def test_typo_search(self):
         data = {'sections': {'Podium Vehicle': [{'item': 'Declasse Impaler SZ', 'details': 'Casino'}], 'Discounts': [{'item': 'Ocelot Jugular', 'details': '40% off'}]}}
         self.assertIn('Impaler', answer_query('what is the podum vehcle', data)['answer'])

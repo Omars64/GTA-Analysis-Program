@@ -8,6 +8,8 @@ from storage import store
 from vehicle_intelligence import vehicle_key, _norm, load_catalog, _best_catalog_match
 
 BASE = 'https://www.gtabase.com/grand-theft-auto-v/vehicles/'
+BASES = ('https://www.gtabase.com/vehicles/grand-theft-auto-v/', BASE)
+LOOKUP_VERSION = 2
 
 
 def parse_profile(soup, url, name):
@@ -53,15 +55,16 @@ def parse_profile(soup, url, name):
 def get_profile(name):
     key = vehicle_key(name)
     cached = store.get('vehicle-profiles', key)
-    if cached and time.time() - cached.get('checked_at', 0) < (604800 if cached.get('available') else 3600):
+    if cached and (cached.get('available') or cached.get('lookup_version') == LOOKUP_VERSION) and time.time() - cached.get('checked_at', 0) < (604800 if cached.get('available') else 3600):
         return cached
     match, _ = _best_catalog_match(name, load_catalog())
-    slugs = list(dict.fromkeys(filter(None, [(match or {}).get('page_slug'), key.replace(' ', '-'), _norm(name).replace(' ', '-') ])))
+    manufacturer_name = re.sub(r'\b(?:motorcycle )?company\b', '', _norm(name))
+    slugs = list(dict.fromkeys(filter(None, [(match or {}).get('page_slug'), key.replace(' ', '-'), '-'.join(manufacturer_name.split()), _norm(name).replace(' ', '-') ])))
     profile = None
     with fetch_context(timeout=7, budget=25):
-        for slug in slugs:
+        for url in (base + slug for slug in slugs for base in BASES):
             try:
-                profile = parse_profile(get_soup(BASE + slug), BASE + slug, name)
+                profile = parse_profile(get_soup(url), url, name)
                 if profile:
                     break
             except InterruptedError:
@@ -72,15 +75,16 @@ def get_profile(name):
             # Search the public vehicle index when a model uses an unexpected slug.
             try:
                 directory = store.get('vehicle-profiles', '_directory')
-                if not directory or time.time() - directory.get('checked_at', 0) > 604800:
+                if not directory or directory.get('lookup_version') != LOOKUP_VERSION or time.time() - directory.get('checked_at', 0) > 604800:
                     soup = get_soup(BASE)
                     links = {}
                     for link in soup.select('a[href]'):
                         url = urljoin(BASE, link['href']).split('?')[0].rstrip('/')
-                        label = link.get_text(' ', strip=True) or link.get('title', '')
-                        if url.startswith(BASE) and label:
+                        heading = link.select_one('h2, h3, .name')
+                        label = heading.get_text(' ', strip=True) if heading else link.get('title') or link.get_text(' ', strip=True)
+                        if url.startswith(BASES) and label:
                             links.setdefault(vehicle_key(label), url)
-                    directory = {'links': links, 'checked_at': time.time()}
+                    directory = {'links': links, 'checked_at': time.time(), 'lookup_version': LOOKUP_VERSION}
                     store.put('vehicle-profiles', '_directory', directory)
                 url = directory['links'].get(key)
                 if url:
@@ -91,5 +95,6 @@ def get_profile(name):
                 pass
     result = profile or {'name': name, 'available': False, 'image_urls': [], 'fields': {}, 'performance': {}, 'durability': []}
     result['checked_at'] = time.time()
+    result['lookup_version'] = LOOKUP_VERSION
     store.put('vehicle-profiles', key, result)
     return result
