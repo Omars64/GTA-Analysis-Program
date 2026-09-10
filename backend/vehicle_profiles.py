@@ -9,7 +9,7 @@ from vehicle_intelligence import vehicle_key, _norm, load_catalog, _best_catalog
 
 BASE = 'https://www.gtabase.com/grand-theft-auto-v/vehicles/'
 BASES = ('https://www.gtabase.com/vehicles/grand-theft-auto-v/', BASE)
-LOOKUP_VERSION = 2
+LOOKUP_VERSION = 3
 
 
 def parse_profile(soup, url, name):
@@ -43,9 +43,20 @@ def parse_profile(soup, url, name):
                 durability.append({'weapon': cells[0].get_text(' ', strip=True), 'hits': cells[1].get_text(' ', strip=True)})
     condition = resistance.select_one('.field-prefix') if resistance else None
     images = []
+    # Newer pages use a generic og:image; their actual vehicle photo is in the
+    # page's structured image/gallery, sometimes served as an optimized WebP.
+    for img in soup.select('img[itemprop="url"], img.ig-slideshow-image[data-ig-lazy-src]'):
+        raw = img.get('data-ig-lazy-src') or img.get('data-src') or img.get('src')
+        if not raw:
+            continue
+        image = urljoin(url, raw).split('#')[0]
+        if image.startswith('https://') and image not in images:
+            images.append(image)
+        if len(images) >= 5:
+            break
     for meta in soup.select('meta[property="og:image"], meta[name="twitter:image"]'):
         image = urljoin(url, meta.get('content', ''))
-        if image.startswith('https://') and image not in images:
+        if image.startswith('https://') and '/images/resources/' not in image and image not in images:
             images.append(image)
     return {'name': name, 'source_url': url, 'fields': fields, 'performance': performance,
             'durability': durability, 'durability_conditions': condition.get_text(' ', strip=True) if condition else '',
@@ -55,7 +66,7 @@ def parse_profile(soup, url, name):
 def get_profile(name):
     key = vehicle_key(name)
     cached = store.get('vehicle-profiles', key)
-    if cached and (cached.get('available') or cached.get('lookup_version') == LOOKUP_VERSION) and time.time() - cached.get('checked_at', 0) < (604800 if cached.get('available') else 3600):
+    if cached and cached.get('lookup_version') == LOOKUP_VERSION and time.time() - cached.get('checked_at', 0) < (604800 if cached.get('available') else 3600):
         return cached
     match, _ = _best_catalog_match(name, load_catalog())
     manufacturer_name = re.sub(r'\b(?:motorcycle )?company\b', '', _norm(name))

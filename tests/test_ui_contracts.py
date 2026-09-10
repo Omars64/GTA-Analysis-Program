@@ -11,6 +11,14 @@ from vehicle_profiles import parse_profile, get_profile, BASES
 
 
 class InterfaceContracts(unittest.TestCase):
+    def test_vehicle_photo_preferred_over_generic_social_card(self):
+        soup = BeautifulSoup('''<title>Karin Woodlander | GTA 5 Online Vehicle Stats</title>
+        <meta property="og:image" content="https://www.gtabase.com/images/resources/GTABase-Website-Card-2022.jpg">
+        <img itemprop="url" src="/igallery/woodlander.jpg#joomlaImage">
+        <img class="ig-slideshow-image" data-ig-lazy-src="/igallery/woodlander-side.jpg">''', 'html.parser')
+        result = parse_profile(soup, BASES[0] + 'woodlander', 'Karin Woodlander')
+        self.assertEqual(result['image_urls'], ['https://www.gtabase.com/igallery/woodlander.jpg', 'https://www.gtabase.com/igallery/woodlander-side.jpg'])
+
     def test_current_and_legacy_vehicle_urls(self):
         for name, expected in [('Karin Woodlander', BASES[0] + 'woodlander'), ('Western Company Seabreeze', BASES[1] + 'western-seabreeze')]:
             soup = BeautifulSoup(f'<title>{name} | GTA 5 Online Vehicle Stats</title><meta property="og:image" content="https://example.com/vehicle.jpg">', 'html.parser')
